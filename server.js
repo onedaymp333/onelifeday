@@ -119,18 +119,9 @@ app.post('/api/balance', async (req, res) => {
   }
 });
 
-// ── Health Check ──
+// ── Root redirect ──
 app.get('/', (req, res) => {
-  res.json({ 
-    status: '✅ OneLifeDay server is running!',
-    version: '1.0.0',
-    endpoints: [
-      'POST /api/create_link_token',
-      'POST /api/exchange_token', 
-      'POST /api/transactions',
-      'POST /api/balance'
-    ]
-  });
+  res.redirect('/onelifeday.html');
 });
 
 // ── Start Server ──
