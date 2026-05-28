@@ -6,6 +6,7 @@ const { Configuration, PlaidApi, PlaidEnvironments } = require('plaid');
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use(express.static(__dirname));
 
 // ── Plaid Setup ──
 const config = new Configuration({
