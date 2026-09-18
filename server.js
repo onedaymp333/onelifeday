@@ -2,11 +2,29 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { Configuration, PlaidApi, PlaidEnvironments } = require('plaid');
+const path = require('path');
+const bookingRoutes = require('./booking/routes');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+// Serve the front end from the repo root, but keep server side files out of
+// reach. express.static(__dirname) would otherwise hand out server.js,
+// package.json and booking/config.js to anyone who asked for them by name.
+const PRIVATE_PATHS = /^\/(server\.js|package(-lock)?\.json|render\.yaml|booking|scripts|test|node_modules)(\/|$)/;
+app.use((req, res, next) => {
+  if (PRIVATE_PATHS.test(req.path)) return res.status(404).send('Not found');
+  next();
+});
 app.use(express.static(__dirname));
+app.use(express.static(path.join(__dirname, 'public')));
+
+// ── Booking ──
+// Public scheduling page backed by Google Calendar. See BOOKING_SETUP.md.
+app.use('/api/booking', bookingRoutes);
+app.get('/book', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'book.html'));
+});
 
 // ── Plaid Setup ──
 const config = new Configuration({
@@ -129,4 +147,5 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🚀 OneLifeDay server running on port ${PORT}`);
   console.log(`🔗 Open http://localhost:${PORT} to test`);
+  console.log(`📅 Booking page at http://localhost:${PORT}/book`);
 });
