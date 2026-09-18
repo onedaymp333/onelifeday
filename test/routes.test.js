@@ -13,6 +13,10 @@ const express = require('express');
 
 const googlePath = require.resolve('../booking/lib/google');
 
+// Load the real module first so the OAuth setup tests can exercise the genuine
+// client builder and scope list, then shadow only the network calls.
+const realGoogle = require('../booking/lib/google');
+
 // Fake calendar state, reset between tests.
 const fake = { busy: [], bookings: [], created: [], configured: true, failNext: false };
 
@@ -21,8 +25,9 @@ require.cache[googlePath] = {
   filename: googlePath,
   loaded: true,
   exports: {
-    SCOPES: [],
-    oauthClient: () => { throw new Error('not used in tests'); },
+    SCOPES: realGoogle.SCOPES,
+    oauthClient: realGoogle.oauthClient,
+    hasRefreshToken: realGoogle.hasRefreshToken,
     isConfigured: () => fake.configured,
     getBusyIntervals: async () => fake.busy,
     listOwnBookings: async () => fake.bookings,
@@ -266,4 +271,101 @@ test('the hourly spam guard counts successful bookings and not rejections', asyn
     config.rules.maxBookingsPerHourPerVisitor = original;
     routes._resetRateLimitForTests();
   }
+});
+
+// ── Browser based one time setup ────────────────────────────────────────────
+// These routes hand out a calendar credential, so the locks get tested hard.
+
+const SETUP_KEY = 'test-setup-key-123';
+
+function withSetupEnv(overrides, run) {
+  const saved = {
+    BOOKING_SETUP_KEY: process.env.BOOKING_SETUP_KEY,
+    GOOGLE_REFRESH_TOKEN: process.env.GOOGLE_REFRESH_TOKEN,
+  };
+  Object.assign(process.env, overrides);
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === undefined) delete process.env[key];
+  }
+  return Promise.resolve()
+    .then(run)
+    .finally(() => {
+      for (const [key, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    });
+}
+
+const raw = (p) => fetch(base + p, { redirect: 'manual' })
+  .then(async (r) => ({ status: r.status, location: r.headers.get('location'), text: await r.text() }));
+
+test('setup refuses to run without a setup key configured', async () => {
+  await withSetupEnv({ BOOKING_SETUP_KEY: undefined, GOOGLE_REFRESH_TOKEN: undefined }, async () => {
+    const { status, text } = await raw('/oauth/start?key=anything');
+    assert.strictEqual(status, 503);
+    assert.match(text, /BOOKING_SETUP_KEY/);
+  });
+});
+
+test('setup refuses a wrong key', async () => {
+  await withSetupEnv({ BOOKING_SETUP_KEY: SETUP_KEY, GOOGLE_REFRESH_TOKEN: undefined }, async () => {
+    assert.strictEqual((await raw('/oauth/start?key=wrong')).status, 403);
+    assert.strictEqual((await raw('/oauth/start')).status, 403);
+  });
+});
+
+test('setup closes permanently once a refresh token exists', async () => {
+  await withSetupEnv({ BOOKING_SETUP_KEY: SETUP_KEY, GOOGLE_REFRESH_TOKEN: 'already-connected' }, async () => {
+    // Even with the correct key, setup must stay shut.
+    const start = await raw(`/oauth/start?key=${SETUP_KEY}`);
+    assert.strictEqual(start.status, 404);
+    assert.match(start.text, /already done/i);
+
+    const callback = await raw(`/oauth/callback?code=x&state=${SETUP_KEY}`);
+    assert.strictEqual(callback.status, 404);
+  });
+});
+
+test('the correct key redirects to Google asking for offline consent', async () => {
+  await withSetupEnv({ BOOKING_SETUP_KEY: SETUP_KEY, GOOGLE_REFRESH_TOKEN: undefined }, async () => {
+    process.env.GOOGLE_CLIENT_ID = 'test-client-id';
+    process.env.GOOGLE_CLIENT_SECRET = 'test-client-secret';
+
+    const { status, location } = await raw(`/oauth/start?key=${SETUP_KEY}`);
+    assert.strictEqual(status, 302);
+
+    const url = new URL(location);
+    assert.strictEqual(url.origin + url.pathname, 'https://accounts.google.com/o/oauth2/v2/auth');
+    assert.strictEqual(url.searchParams.get('access_type'), 'offline', 'offline is what yields a refresh token');
+    assert.strictEqual(url.searchParams.get('prompt'), 'consent');
+    assert.strictEqual(url.searchParams.get('state'), SETUP_KEY);
+    assert.match(url.searchParams.get('scope'), /auth\/calendar/);
+    assert.match(url.searchParams.get('redirect_uri'), /\/api\/booking\/oauth\/callback$/);
+
+    delete process.env.GOOGLE_CLIENT_ID;
+    delete process.env.GOOGLE_CLIENT_SECRET;
+  });
+});
+
+test('the callback rejects a mismatched or missing state', async () => {
+  await withSetupEnv({ BOOKING_SETUP_KEY: SETUP_KEY, GOOGLE_REFRESH_TOKEN: undefined }, async () => {
+    assert.strictEqual((await raw('/oauth/callback?code=x&state=forged')).status, 403);
+    assert.strictEqual((await raw('/oauth/callback?code=x')).status, 403);
+  });
+});
+
+test('the callback rejects a request carrying no authorization code', async () => {
+  await withSetupEnv({ BOOKING_SETUP_KEY: SETUP_KEY, GOOGLE_REFRESH_TOKEN: undefined }, async () => {
+    const { status, text } = await raw(`/oauth/callback?state=${SETUP_KEY}`);
+    assert.strictEqual(status, 400);
+    assert.match(text, /no code/i);
+  });
+});
+
+test('setup pages escape whatever they echo back', async () => {
+  await withSetupEnv({ BOOKING_SETUP_KEY: '<script>alert(1)</script>', GOOGLE_REFRESH_TOKEN: undefined }, async () => {
+    const { text } = await raw('/oauth/start?key=nope');
+    assert.ok(!text.includes('<script>alert(1)</script>'), 'must not reflect raw markup');
+  });
 });

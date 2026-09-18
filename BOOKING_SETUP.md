@@ -1,116 +1,209 @@
 # Booking Setup
 
-A public scheduling page at `/book`, backed directly by Google Calendar.
+Your booking page lives at `/book`. This guide connects it to Google Calendar.
 
-## How it works
+**You do not need a terminal.** Everything below happens in a browser.
+Set aside about 15 minutes. You do this once, ever.
 
-You never open an admin panel. You block time the way you already do, by
-putting events on your Google Calendar. The server:
+---
 
-1. Reads your **hours** from `booking/config.js` (the hard limit, the times you
-   are willing to be booked at all).
-2. Reads your **busy time** live from Google Calendar every time someone loads
-   the page.
-3. Subtracts one from the other, applies your rules (notice period, buffers,
-   daily cap), and shows what is left.
-4. When someone picks a slot, writes the meeting onto your calendar and invites
-   them, so Google sends the confirmation and reminders. The slot disappears
-   for the next visitor immediately.
+## What you are actually doing
 
-Two tricks worth knowing:
+Google will not let a website touch your calendar unless you give it
+permission. These steps create that permission and hand your site the key.
 
-- An event marked **Free** instead of **Busy** in Google Calendar does *not*
-  block a slot. Use it for soft holds you would still take a meeting during.
-- An **all day event marked Busy** blocks the whole day. Fastest way to go dark
-  on a specific date without touching any code.
+Three values come out of it, and they go into Render as environment variables:
 
-## One time setup
+| Value | Where it comes from |
+|---|---|
+| `GOOGLE_CLIENT_ID` | Step 2 |
+| `GOOGLE_CLIENT_SECRET` | Step 2 |
+| `GOOGLE_REFRESH_TOKEN` | Step 5 |
 
-### 1. Create Google OAuth credentials
+---
 
-1. Go to https://console.cloud.google.com/ and create a project (any name).
-2. **APIs & Services > Library**, search "Google Calendar API", click **Enable**.
-3. **APIs & Services > OAuth consent screen**:
-   - User type: **External**
-   - Fill in app name, your email for both support and developer contact
-   - On the **Audience** page, add `therealoneday@gmail.com` as a **Test user**
-   - Leave it in Testing mode. You do not need Google to verify the app,
-     because you are the only person who ever authorizes it. Visitors to your
-     booking page never sign in.
-4. **APIs & Services > Credentials > Create Credentials > OAuth client ID**:
+## Step 1: Find your Render URL
+
+Open https://dashboard.render.com, click your **onelifeday** service. The URL
+is at the top, something like `https://onelifeday.onrender.com`.
+
+Write it down. You need it twice below. Everywhere this guide says
+`YOUR-URL`, paste that in.
+
+---
+
+## Step 2: Create Google credentials
+
+1. Go to https://console.cloud.google.com/
+2. Top left, click the project dropdown, then **New Project**. Name it
+   `onelifeday`. Click **Create**. Wait, then make sure it is selected.
+3. In the search bar at the top, type **Google Calendar API**, open it, click
+   **Enable**.
+4. Left sidebar, **APIs & Services** > **OAuth consent screen**. Click
+   **Get started**.
+   - App name: `OneLifeDay Booking`
+   - User support email: your Gmail
+   - Audience: **External**
+   - Developer contact: your Gmail
+   - Click through to **Create**.
+5. Left sidebar, **Audience**. Under **Test users**, click **Add users**, enter
+   `therealoneday@gmail.com`, save.
+
+   > Leave the app in Testing mode. You never need Google to verify it,
+   > because you are the only person who ever signs in. People booking you
+   > never sign in to anything.
+
+6. Left sidebar, **Clients**, then **Create client**.
    - Application type: **Web application**
-   - Authorized redirect URI, exactly this:
-     `http://localhost:3000/api/booking/oauth/callback`
-   - Copy the **Client ID** and **Client secret**.
+   - Name: `onelifeday web`
+   - Under **Authorized redirect URIs**, click **Add URI** and paste exactly:
 
-### 2. Put them in `.env`
+     ```
+     YOUR-URL/api/booking/oauth/callback
+     ```
+
+     So if your URL is `https://onelifeday.onrender.com`, that becomes
+     `https://onelifeday.onrender.com/api/booking/oauth/callback`
+
+     This has to match character for character. No trailing slash.
+   - Click **Create**.
+7. A box appears with **Client ID** and **Client secret**. Keep this tab open,
+   you need both in the next step.
+
+---
+
+## Step 3: Put those into Render
+
+1. Render dashboard > your service > **Environment** in the left sidebar.
+2. Click **Add Environment Variable** three times and add:
+
+   | Key | Value |
+   |---|---|
+   | `GOOGLE_CLIENT_ID` | the Client ID from step 2 |
+   | `GOOGLE_CLIENT_SECRET` | the Client secret from step 2 |
+   | `BOOKING_SETUP_KEY` | any random string you make up |
+
+   `BOOKING_SETUP_KEY` is a temporary password so a stranger cannot run this
+   setup on your site. Make up something long and messy. You use it once in
+   step 4 and never again.
+
+3. **Save changes.** Render redeploys. Wait for it to finish.
+
+---
+
+## Step 4: Approve the connection
+
+In your browser, go to:
 
 ```
-GOOGLE_CLIENT_ID=...
-GOOGLE_CLIENT_SECRET=...
+YOUR-URL/api/booking/oauth/start?key=YOUR-SETUP-KEY
 ```
 
-### 3. Get your refresh token
+Google asks you to sign in and approve.
 
-```bash
-node scripts/google-auth.js
-```
+> It will warn you the app is not verified. That is expected, it is your own
+> app. Click **Advanced**, then **Go to OneLifeDay Booking (unsafe)**.
 
-Open the URL it prints, approve the access (Google will warn you the app is
-unverified, click through **Advanced > Go to ...**, it is your own app), and
-the script prints a refresh token. Paste it into `.env`:
+Approve the calendar access.
 
-```
-GOOGLE_REFRESH_TOKEN=...
-```
+---
 
-You only ever do this once. The token does not expire under normal use.
+## Step 5: Copy the token back
 
-> Treat the refresh token like a password. It grants read and write access to
-> your calendar. It is in `.gitignore` via `.env`, keep it that way.
+You land on a page that says **Connected** with a long value and a **Copy
+token** button.
 
-### 4. Try it locally
+1. Copy it.
+2. Render > **Environment** > add one more variable:
 
-```bash
-npm start
-```
+   | Key | Value |
+   |---|---|
+   | `GOOGLE_REFRESH_TOKEN` | the value you just copied |
 
-Open http://localhost:3000/book
+3. **Save changes** and let it redeploy.
 
-### 5. Deploy
+Treat this value like a password. It grants access to your calendar. Never put
+it in a message, a screenshot, or a commit.
 
-In the Render dashboard, add the same three variables under **Environment**:
-`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`. Then
-redeploy. Your link is `https://<your-render-url>/book`.
+The moment this variable exists, the setup URL from step 4 shuts itself off
+permanently. You can delete `BOOKING_SETUP_KEY` if you like.
 
-## Editing your availability
+---
 
-Everything lives in **`booking/config.js`**, which is commented section by
-section. The parts you will actually touch:
+## Step 6: Try it
+
+Open `YOUR-URL/book`
+
+You should see your name, three meeting types, and real open times pulled from
+your calendar. Book one yourself as a test. It should appear on your Google
+Calendar within seconds with a Meet link.
+
+Done. Hand that link to people.
+
+---
+
+## Day to day
+
+You never come back here. You block time by putting events on Google Calendar
+the way you already do, and the page updates itself.
+
+- An event marked **Free** instead of **Busy** does **not** block a slot. Use
+  it for soft holds you would still take a meeting during.
+- An **all day event marked Busy** blocks that whole day. Fastest way to go
+  dark on a date.
+
+---
+
+## Changing your hours or meeting types
+
+Everything is in **`booking/config.js`**, commented section by section.
 
 | Section | What it controls |
 |---|---|
-| `weeklyHours` | The hours you are bookable, per weekday. Empty array = never. |
-| `meetingTypes` | Names and lengths of the meetings people can book. |
-| `rules` | Notice period, how far ahead people can book, buffers, daily cap. |
-| `busyCalendars` | Which calendars make you unavailable. |
-| `locations` | Google Meet, phone, in person. |
-| `form` | Which fields the booking form asks for. |
+| 2. `weeklyHours` | The hours you are bookable, per weekday. Empty = never. |
+| 3. `dateOverrides` | Special hours or blackouts for one specific date. |
+| 4. `meetingTypes` | Names and lengths of bookable meetings. |
+| 5. `rules` | Notice period, how far ahead, buffers, daily cap. |
+| 6. `busyCalendars` | Which calendars make you unavailable. |
+| 7. `locations` | Google Meet, phone, in person. |
+| 8. `form` | Which fields the booking form asks for. |
 
-Changing this file needs a redeploy. Changing your *calendar* does not, which
-is the point: day to day you only touch Google Calendar.
+Editing this file needs a redeploy. Editing your *calendar* does not.
 
-## Running the tests
+---
 
-```bash
-npm test
-```
+## If something goes wrong
 
-Covers the slot engine: windows, buffers, notice periods, daily caps, date
-overrides, daylight saving, and rejection of forged time slots.
+**"redirect_uri_mismatch" from Google**
+The URI in step 2.6 does not exactly match your site. Check for a missing
+`https://`, a typo, or a trailing slash.
 
-## Known limitation
+**The booking page says it is not connected**
+One of the three variables is missing or misspelled in Render, or the deploy
+has not finished.
 
-Render's free plan sleeps a service after 15 minutes idle. The first person to
-open your link after a quiet stretch waits roughly 30 seconds for the page.
-Either move to a paid instance or point an uptime pinger at the URL.
+**"No refresh token came back"**
+Google only issues one on a first approval. Go to
+https://myaccount.google.com/permissions, remove **OneLifeDay Booking**, then
+redo step 4.
+
+**The page takes 30 seconds to load**
+Render's free plan sleeps a service after 15 minutes idle. The first visitor
+after a quiet stretch waits for it to wake. Upgrade to a paid instance, or
+point a free uptime pinger at the URL.
+
+**No times show up at all**
+Check `weeklyHours` in `booking/config.js` is not all empty, and that your
+calendar is not fully booked across the window. Remember the 24 hour minimum
+notice hides today and part of tomorrow.
+
+---
+
+## For the terminal path instead
+
+If you would rather run setup locally: put `GOOGLE_CLIENT_ID` and
+`GOOGLE_CLIENT_SECRET` in a `.env` file, add
+`http://localhost:3000/api/booking/oauth/callback` as a second authorized
+redirect URI in step 2.6, then run `node scripts/google-auth.js` and follow it.
+
+Run the test suite with `npm test`.

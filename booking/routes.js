@@ -208,6 +208,132 @@ router.post('/book', async (req, res) => {
   }
 });
 
+// ══════════════════════════════════════════════════════════════════════════
+//  One time setup, done from a browser.
+//
+//  Running an OAuth flow normally means a terminal. These two routes let the
+//  whole thing happen in a browser instead: visit /oauth/start, approve on
+//  Google, and the callback prints the refresh token to paste into the host's
+//  environment variables.
+//
+//  Locked down three ways, because this flow hands out a calendar credential:
+//    1. BOOKING_SETUP_KEY must be set, and the request must carry it.
+//    2. The moment GOOGLE_REFRESH_TOKEN exists, both routes go dark for good.
+//    3. The token is shown once, in the browser. It is never written to disk
+//       or logged.
+// ══════════════════════════════════════════════════════════════════════════
+
+function setupUnavailable(res) {
+  if (google.hasRefreshToken()) {
+    res.status(404).send(setupPage('Setup is already done',
+      'This booking page is connected to Google Calendar, so setup is closed. ' +
+      'To reconnect, clear GOOGLE_REFRESH_TOKEN in your host environment first.'));
+    return true;
+  }
+  if (!process.env.BOOKING_SETUP_KEY) {
+    res.status(503).send(setupPage('Setup key missing',
+      'Set a BOOKING_SETUP_KEY environment variable on your host, redeploy, ' +
+      'then open this link again with ?key=your-key on the end.'));
+    return true;
+  }
+  return false;
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function setupPage(heading, body, token) {
+  return `<!DOCTYPE html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>${escapeHtml(heading)}</title>
+<style>
+  body { background:#0e0f13; color:#f2f3f5; font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+         margin:0; padding:48px 16px; }
+  .card { max-width:640px; margin:0 auto; background:#17191f; border:1px solid #2a2e38;
+          border-radius:14px; padding:28px; }
+  h1 { font-size:22px; margin:0 0 14px; }
+  p { color:#9aa1ad; }
+  code { display:block; background:#0e0f13; border:1px solid #2a2e38; border-radius:10px;
+         padding:16px; margin:18px 0; word-break:break-all; color:#e8c547;
+         font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .warn { color:#ff6b6b; font-size:14px; }
+  button { background:#e8c547; color:#14151a; border:none; border-radius:10px;
+           padding:12px 18px; font:inherit; font-weight:700; cursor:pointer; }
+</style></head><body><div class="card">
+<h1>${escapeHtml(heading)}</h1>
+<p>${escapeHtml(body)}</p>
+${token ? `<code id="t">${escapeHtml(token)}</code>
+<button onclick="navigator.clipboard.writeText(document.getElementById('t').textContent).then(()=>this.textContent='Copied')">Copy token</button>
+<p class="warn">Treat this like a password. It grants access to your calendar. Paste it into your host as GOOGLE_REFRESH_TOKEN, then close this tab.</p>` : ''}
+</div></body></html>`;
+}
+
+/** The URI Google redirects back to, derived from how this request arrived. */
+function callbackUri(req) {
+  return `${req.protocol}://${req.get('host')}/api/booking/oauth/callback`;
+}
+
+router.get('/oauth/start', (req, res) => {
+  if (setupUnavailable(res)) return;
+
+  if (req.query.key !== process.env.BOOKING_SETUP_KEY) {
+    return res.status(403).send(setupPage('Wrong key',
+      'Add ?key=your-setup-key to the end of this URL, matching the ' +
+      'BOOKING_SETUP_KEY you set on your host.'));
+  }
+
+  try {
+    const client = google.oauthClient(callbackUri(req));
+    res.redirect(client.generateAuthUrl({
+      access_type: 'offline',  // this is what produces a refresh token
+      prompt: 'consent',       // force a fresh one even on a repeat approval
+      scope: google.SCOPES,
+      state: process.env.BOOKING_SETUP_KEY,
+    }));
+  } catch (error) {
+    res.status(503).send(setupPage('Google credentials missing', error.message));
+  }
+});
+
+router.get('/oauth/callback', async (req, res) => {
+  if (setupUnavailable(res)) return;
+
+  if (req.query.state !== process.env.BOOKING_SETUP_KEY) {
+    return res.status(403).send(setupPage('Setup link expired',
+      'Start again from the /oauth/start link with your key.'));
+  }
+  if (!req.query.code) {
+    return res.status(400).send(setupPage('Google sent no code',
+      'Start again from the /oauth/start link with your key.'));
+  }
+
+  try {
+    const client = google.oauthClient(callbackUri(req));
+    const { tokens } = await client.getToken(String(req.query.code));
+
+    if (!tokens.refresh_token) {
+      return res.status(500).send(setupPage('No refresh token came back',
+        'Google only issues one on a first approval. Remove this app at ' +
+        'myaccount.google.com/permissions, then run setup again.'));
+    }
+
+    res.send(setupPage(
+      'Connected',
+      'Copy the value below, add it to your host environment variables as ' +
+      'GOOGLE_REFRESH_TOKEN, and redeploy. That is the last setup step.',
+      tokens.refresh_token
+    ));
+  } catch (error) {
+    console.error('[booking] oauth callback failed:', error.message);
+    res.status(500).send(setupPage('Could not finish connecting',
+      'Google rejected the exchange. The usual cause is a redirect URI on your ' +
+      'OAuth client that does not exactly match this page address.'));
+  }
+});
+
 // Test seam. The limiter keeps per IP state in memory, and every request in a
 // test run arrives from the same loopback address, so tests need a way to
 // start clean. Not used in production.

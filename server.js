@@ -6,6 +6,9 @@ const path = require('path');
 const bookingRoutes = require('./booking/routes');
 
 const app = express();
+// Render terminates TLS at its proxy. Without this, req.protocol reads "http"
+// and the OAuth redirect URI we build would not match what Google has on file.
+app.set('trust proxy', 1);
 app.use(cors());
 app.use(express.json());
 // Serve the front end from the repo root, but keep server side files out of

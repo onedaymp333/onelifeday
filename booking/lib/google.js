@@ -21,12 +21,19 @@ function requireEnv(name) {
   return value;
 }
 
-function oauthClient() {
+function oauthClient(redirectUri) {
   return new google.auth.OAuth2(
     requireEnv('GOOGLE_CLIENT_ID'),
     requireEnv('GOOGLE_CLIENT_SECRET'),
-    process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3000/api/booking/oauth/callback'
+    redirectUri ||
+      process.env.GOOGLE_REDIRECT_URI ||
+      'http://localhost:3000/api/booking/oauth/callback'
   );
+}
+
+/** True once a refresh token exists, which permanently closes browser setup. */
+function hasRefreshToken() {
+  return Boolean(process.env.GOOGLE_REFRESH_TOKEN);
 }
 
 function isConfigured() {
@@ -117,4 +124,7 @@ async function createBooking(calendarId, event, { withMeet }) {
   return data;
 }
 
-module.exports = { SCOPES, oauthClient, isConfigured, getBusyIntervals, listOwnBookings, createBooking };
+module.exports = {
+  SCOPES, oauthClient, isConfigured, hasRefreshToken,
+  getBusyIntervals, listOwnBookings, createBooking,
+};
