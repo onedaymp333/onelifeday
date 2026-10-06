@@ -13,3 +13,11 @@ services:
         sync: false
       - key: PLAID_SECRET
         sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REFRESH_TOKEN
+        sync: false
+      - key: BOOKING_SETUP_KEY
+        sync: false
