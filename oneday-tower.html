@@ -419,8 +419,10 @@ button,.btn{font:inherit;cursor:pointer}
       p.buffer--;
       if (p.grounded || p.coyote > 0){
         // perfect timing: jump within a few frames of touching down
+        // a perfect jump launches higher, and chaining them launches higher still
         const perfect = p.grounded && p.landT <= 6;
-        p.vy = -(10.6 + p.speed * 0.95) * (perfect ? 1.08 : 1);
+        const boost = perfect ? Math.min(1.34, 1.2 + S.streak * 0.035) : 1;
+        p.vy = -(10.6 + p.speed * 0.95) * boost;
         p.grounded = false; p.coyote = 0; p.buffer = 0;
         p.squash = -0.6;
         if (perfect){
