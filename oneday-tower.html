@@ -26,6 +26,7 @@ body{background:var(--night);color:var(--text);font-family:var(--body);font-size
 #wrap{position:relative;height:100%;max-width:520px;margin:0 auto}
 #cv{display:block;width:100%;height:100%;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;cursor:pointer}
 .panel{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;background:var(--veil);overflow-y:auto}
+.panel[hidden]{display:none}
 .card{width:100%;max-width:360px;background:var(--card);border:2px solid var(--ice-deep);border-radius:20px;padding:22px 20px;display:flex;flex-direction:column;gap:14px;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.45)}
 h1,h2{font-family:var(--display);font-weight:400;margin:0;line-height:.95;color:var(--ice);text-shadow:0 4px 0 var(--ice-deep);text-wrap:balance}
 h1{font-size:2.6rem}
@@ -74,6 +75,8 @@ button,.btn{font:inherit;cursor:pointer}
         <li><b>Tap right</b>jump to the right</li>
         <li><b>Run first</b>speed makes bigger jumps</li>
         <li><b>Skip floors</b>back to back for combos</li>
+        <li><b>Tap as you land</b>for a perfect flip</li>
+        <li><b>Every 100 floors</b>a brand new world</li>
       </ul>
       <div class="char">
         <canvas id="pv" width="168" height="168" aria-label="Your character"></canvas>
@@ -127,6 +130,23 @@ button,.btn{font:inherit;cursor:pointer}
   };
   const FONT = '"Bungee","Arial Black",Impact,sans-serif';
 
+  // A new world every 100 floors. After the last one it loops back around.
+  const THEMES = [
+    { name:'ICE TOWER',     top:'#0b1030', bot:'#2b1f5c', b1:'#262b5e', b2:'#2e3470', mortar:'#1a1e48', plat:'#c8f3ff', deep:'#5fb8d9', decor:'stars' },
+    { name:'THE FOREST',    top:'#0f2e1d', bot:'#3f7a3a', b1:'#5a4630', b2:'#6b5539', mortar:'#3a2c1d', plat:'#9be07a', deep:'#4f8a35', decor:'leaves' },
+    { name:'RAINBOW ROAD',  top:'#ffb3c7', bot:'#aee3ff', b1:'#fff',    b2:'#fff',    mortar:'#ffffff', plat:'#ffffff', deep:'#9b7bff', decor:'sparkles', rainbow:true },
+    { name:'DESERT SUNSET', top:'#3b1b4a', bot:'#ff9a4d', b1:'#c98a4b', b2:'#d89b5a', mortar:'#94602f', plat:'#ffe0a3', deep:'#c98a4b', decor:'dust' },
+    { name:'DEEP OCEAN',    top:'#021a33', bot:'#0e6e8c', b1:'#1d4e5f', b2:'#24606f', mortar:'#123540', plat:'#7ff0e0', deep:'#2aa59a', decor:'bubbles' },
+    { name:'VOLCANO',       top:'#1a0505', bot:'#7a1a0a', b1:'#3a2a2a', b2:'#463232', mortar:'#1c1010', plat:'#ffb347', deep:'#d1401f', decor:'embers' },
+    { name:'CANDY LAND',    top:'#ffd6ec', bot:'#c9f2ff', b1:'#ff8fc8', b2:'#ffffff', mortar:'#ffd1e8', plat:'#fff1a8', deep:'#ff8fc8', decor:'sprinkles' },
+    { name:'OUTER SPACE',   top:'#000004', bot:'#1b0b3a', b1:'#22223a', b2:'#2b2b48', mortar:'#11111f', plat:'#d9d9ff', deep:'#7a6cff', decor:'galaxy' },
+    { name:'NEON CITY',     top:'#0a0014', bot:'#2a0040', b1:'#140022', b2:'#1c0030', mortar:'#ff2bd6', plat:'#29f3ff', deep:'#ff2bd6', decor:'rain' },
+    { name:'GOLDEN CLOUDS', top:'#ffe9a8', bot:'#ffb84d', b1:'#f6e3b0', b2:'#fff0c8', mortar:'#d9b45c', plat:'#ffffff', deep:'#e8a83a', decor:'clouds' }
+  ];
+  const RAINBOW = ['#ffb3c7','#ffd59e','#fff3a3','#bff5b0','#aee3ff','#d2b8ff'];
+  const SPRINK = ['#ff5fa2','#ffd23f','#5fd3ff','#8cff7a','#b388ff'];
+  const themeAt = n => THEMES[Math.floor(Math.max(0, n) / 100) % THEMES.length];
+
   // World units: the tower is 400 wide; height follows the screen.
   const W = 400, WALL = 22, GAP = 80, GRAV = 0.62, HALF = 13, PH = 60;
   let H = 700, scale = 1;
@@ -163,6 +183,7 @@ button,.btn{font:inherit;cursor:pointer}
     jump(){ tone(320, 640, 0.12, 'square', 0.04); },
     combo(){ tone(520, 1040, 0.18, 'triangle', 0.07); setTimeout(() => tone(780, 1560, 0.2, 'triangle', 0.06), 90); },
     hurry(){ tone(880, 440, 0.25, 'sawtooth', 0.04); },
+    perfect(){ tone(440, 1320, 0.22, 'triangle', 0.07); },
     die(){ tone(420, 70, 0.6, 'sawtooth', 0.06); }
   };
   function paintMute(){
@@ -241,15 +262,16 @@ button,.btn{font:inherit;cursor:pointer}
 
   // Draws the climber with feet at (x, y).
   function drawClimber(c, x, y, o){
+    const rot = o.rot || 0;
     if (charImg && charMode === 'full'){
       const box = 62, k = Math.min(box / charImg.width, box / charImg.height);
       const w = charImg.width * k, h = charImg.height * k;
-      c.save(); c.translate(x, y); c.scale(o.dir * o.sx, o.sy);
+      c.save(); c.translate(x, y - 30); c.rotate(rot); c.translate(0, 30); c.scale(o.dir * o.sx, o.sy);
       c.drawImage(charImg, -w / 2, -h, w, h);
       c.restore();
       return;
     }
-    c.save(); c.translate(x, y); c.scale(o.dir * o.sx, o.sy);
+    c.save(); c.translate(x, y - 30); c.rotate(rot); c.translate(0, 30); c.scale(o.dir * o.sx, o.sy);
     const s = o.grounded ? Math.sin(o.anim) * 5 : 0;
     const tuck = o.grounded ? 0 : 4;
     // legs and shoes
@@ -282,7 +304,8 @@ button,.btn{font:inherit;cursor:pointer}
     c.restore();
     if (charImg && charMode === 'face'){
       // photo face stays unmirrored so it reads correctly
-      const hx = x, hy = y - 50 * o.sy, r = 16;
+      const d = 20 * o.sy, r = 16;
+      const hx = x + d * Math.sin(rot), hy = y - 30 - d * Math.cos(rot);
       const k = Math.max((r * 2) / charImg.width, (r * 2) / charImg.height);
       const w = charImg.width * k, h = charImg.height * k;
       c.save();
@@ -313,9 +336,10 @@ button,.btn{font:inherit;cursor:pointer}
   function newGame(){
     S = {
       plats: [], nextN: 0, camY: -H + 150, t: 0, started: false, scrolling: false, scrollStart: 0, level: 0,
-      p: { x: W / 2, y: 0, vy: 0, dir: 1, speed: 2.6, grounded: true, coyote: 0, buffer: 0, squash: 0, anim: 0, plat: null },
+      p: { x: W / 2, y: 0, vy: 0, dir: 1, speed: 2.6, grounded: true, coyote: 0, buffer: 0, squash: 0, anim: 0, plat: null,
+           landT: 99, flip: null, flipDur: 1 },
       lastFloor: 0, maxFloor: 0, bonus: 0, combo: { count: 0, floors: 0, timer: 0 },
-      popups: [], banner: null, deadAt: 0
+      popups: [], banner: null, parts: [], streak: 0
     };
     genTo(S.camY - 200);
     S.p.plat = S.plats[0];
@@ -365,13 +389,27 @@ button,.btn{font:inherit;cursor:pointer}
     S.lastFloor = n;
     if (n > S.maxFloor){
       S.maxFloor = n;
-      if (n % 50 === 0) banner('FLOOR ' + n);
+      if (n % 100 === 0){ banner(themeAt(n).name); sfx.combo(); }
+      else if (n % 50 === 0) banner('FLOOR ' + n);
     }
+  }
+
+  // Sparks thrown off during a perfect flip: stars at first, flames once you chain 3 in a row.
+  function emit(p){
+    const flame = S.streak >= 3;
+    S.parts.push({
+      x: p.x + (Math.random() - 0.5) * 18, y: p.y - 30 + (Math.random() - 0.5) * 18,
+      vx: (Math.random() - 0.5) * 2 - p.dir * 1.2,
+      vy: flame ? 1 + Math.random() * 1.5 : (Math.random() - 0.5) * 2 + 0.8,
+      life: 0, max: flame ? 26 : 34, kind: flame ? 'flame' : 'star',
+      size: flame ? 7 + Math.random() * 5 : 3 + Math.random() * 3, spin: Math.random() * 6
+    });
   }
 
   function step(){
     const p = S.p;
     S.t++;
+    if (p.grounded) p.landT++;
     if (p.grounded) { p.speed = Math.min(7.2, p.speed + 0.045); p.anim += p.speed * 0.09; }
     p.x += p.dir * p.speed;
     if (p.x - HALF < WALL){ p.x = WALL + HALF; p.dir = 1; }
@@ -380,10 +418,23 @@ button,.btn{font:inherit;cursor:pointer}
     if (p.buffer > 0){
       p.buffer--;
       if (p.grounded || p.coyote > 0){
-        p.vy = -(10.6 + p.speed * 0.95);
+        // perfect timing: jump within a few frames of touching down
+        const perfect = p.grounded && p.landT <= 6;
+        p.vy = -(10.6 + p.speed * 0.95) * (perfect ? 1.08 : 1);
         p.grounded = false; p.coyote = 0; p.buffer = 0;
         p.squash = -0.6;
-        sfx.jump();
+        if (perfect){
+          S.streak++;
+          p.flip = 0;
+          p.flipDur = Math.max(20, (-p.vy / GRAV) * 0.9);
+          S.bonus += 5 * S.streak;
+          popup(S.streak > 1 ? 'PERFECT x' + S.streak : 'PERFECT!', S.streak >= 3 ? C.hoodie : C.gold);
+          for (let k = 0; k < 14; k++) emit(p);
+          sfx.perfect();
+        } else {
+          S.streak = 0;
+          sfx.jump();
+        }
       }
     }
 
@@ -396,6 +447,7 @@ button,.btn{font:inherit;cursor:pointer}
         for (const pl of S.plats){
           if (prevY <= pl.y + 0.01 && p.y >= pl.y && p.x + 9 > pl.x && p.x - 9 < pl.x + pl.w){
             p.y = pl.y; p.vy = 0; p.grounded = true; p.plat = pl; p.squash = 1;
+            p.landT = 0; p.flip = null;
             land(pl.n);
             break;
           }
@@ -405,6 +457,17 @@ button,.btn{font:inherit;cursor:pointer}
       p.grounded = false; p.coyote = 6; p.vy = 0;
     }
     p.squash *= 0.82;
+
+    if (p.flip !== null){
+      p.flip++;
+      emit(p);
+      if (S.streak >= 3) emit(p);
+      if (p.flip >= p.flipDur) p.flip = null;
+    }
+    for (const q of S.parts){
+      q.x += q.vx; q.y += q.vy; q.vx *= 0.96; q.vy *= 0.96; q.life++;
+    }
+    S.parts = S.parts.filter(q => q.life < q.max);
 
     if (S.combo.count){
       if (p.grounded) S.combo.timer--;
@@ -460,15 +523,128 @@ button,.btn{font:inherit;cursor:pointer}
   });
 
   // ---------- drawing ----------
-  function drawWall(x0){
+  // The two themes on screen right now, and how far we are blended into the next one.
+  function viewThemes(){
+    const f = Math.max(0, -(S.camY + H * 0.5) / GAP);
+    const i = Math.floor(f / 100), local = f - i * 100;
+    const t = Math.min(1, Math.max(0, (local - 92) / 8));
+    return [THEMES[i % THEMES.length], THEMES[(i + 1) % THEMES.length], t];
+  }
+
+  function drawSky(th){
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    if (th.rainbow) RAINBOW.forEach((c, k) => g.addColorStop(k / (RAINBOW.length - 1), c));
+    else { g.addColorStop(0, th.top); g.addColorStop(1, th.bot); }
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  }
+
+  function star5(c, x, y, r, rot){
+    c.beginPath();
+    for (let k = 0; k < 10; k++){
+      const rad = k % 2 ? r * 0.45 : r, a = rot + k * Math.PI / 5 - Math.PI / 2;
+      c.lineTo(x + Math.cos(a) * rad, y + Math.sin(a) * rad);
+    }
+    c.closePath(); c.fill();
+  }
+
+  function drawDecor(th, alpha){
+    if (alpha <= 0.01) return;
+    const time = performance.now() / 1000, par = -S.camY * 0.15;
+    const wrapY = v => ((v % H) + H) % H;
+    ctx.save();
+    for (let i = 0; i < 48; i++){
+      const bx = (i * 97.31) % W, by = i * 137.7;
+      ctx.globalAlpha = alpha;
+      switch (th.decor){
+        case 'stars': {
+          const s = i % 3 === 0 ? 2 : 1.2;
+          ctx.fillStyle = 'rgba(243,246,255,.55)'; ctx.fillRect(bx, wrapY(by + par), s, s); break;
+        }
+        case 'galaxy': {
+          const y = wrapY(by + par);
+          if (i % 12 === 0){
+            ctx.fillStyle = 'hsla(' + (i * 40) + ',90%,65%,.18)';
+            ctx.beginPath(); ctx.arc(bx, y, 26, 0, Math.PI * 2); ctx.fill();
+          }
+          ctx.globalAlpha = alpha * (0.5 + 0.5 * Math.sin(time * 2 + i));
+          ctx.fillStyle = '#ffffff'; ctx.fillRect(bx, y, 2, 2); break;
+        }
+        case 'leaves': {
+          const y = wrapY(by + par + time * (18 + (i % 4) * 6)), x = bx + Math.sin(time * 1.3 + i) * 12;
+          ctx.fillStyle = i % 2 ? '#b6f07a' : '#6fbf4a';
+          ctx.save(); ctx.translate(x, y); ctx.rotate(time + i);
+          ctx.beginPath(); ctx.ellipse(0, 0, 5, 2.5, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore(); break;
+        }
+        case 'sparkles': {
+          const tw = (Math.sin(time * 3 + i) + 1) / 2;
+          ctx.globalAlpha = alpha * tw; ctx.fillStyle = '#ffffff';
+          star5(ctx, bx, wrapY(by + par), 2 + tw * 3, 0); break;
+        }
+        case 'dust': {
+          const x = ((bx + time * (10 + (i % 5) * 4)) % W + W) % W;
+          ctx.fillStyle = 'rgba(255,224,163,.5)';
+          ctx.beginPath(); ctx.arc(x, wrapY(by + par), 1.5 + (i % 3), 0, Math.PI * 2); ctx.fill(); break;
+        }
+        case 'bubbles': {
+          const y = wrapY(by + par - time * (20 + (i % 4) * 8)), x = bx + Math.sin(time + i) * 6;
+          ctx.strokeStyle = 'rgba(191,248,255,.6)'; ctx.lineWidth = 1.5;
+          ctx.beginPath(); ctx.arc(x, y, 2 + (i % 4) * 1.5, 0, Math.PI * 2); ctx.stroke(); break;
+        }
+        case 'embers': {
+          const y = wrapY(by + par - time * (30 + (i % 5) * 10)), x = bx + Math.sin(time * 2 + i) * 8;
+          ctx.globalAlpha = alpha * (0.5 + 0.5 * Math.sin(time * 8 + i));
+          ctx.fillStyle = i % 2 ? '#ff7a2e' : '#ffd23f'; ctx.fillRect(x, y, 2.5, 2.5); break;
+        }
+        case 'sprinkles': {
+          ctx.fillStyle = SPRINK[i % SPRINK.length];
+          ctx.save(); ctx.translate(bx, wrapY(by + par + time * 12)); ctx.rotate(i);
+          rr(ctx, -4, -1.5, 8, 3, 1.5); ctx.fill(); ctx.restore(); break;
+        }
+        case 'rain': {
+          const y = wrapY(by + par + time * 260);
+          ctx.strokeStyle = i % 3 ? 'rgba(41,243,255,.45)' : 'rgba(255,43,214,.45)'; ctx.lineWidth = 1.5;
+          ctx.beginPath(); ctx.moveTo(bx, y); ctx.lineTo(bx, y + 14); ctx.stroke(); break;
+        }
+        case 'clouds': {
+          if (i % 4) break;
+          const span = W + 140, x = ((bx + time * 8) % span + span) % span - 70, y = wrapY(by + par * 0.6);
+          ctx.fillStyle = 'rgba(255,255,255,.6)';
+          ctx.beginPath(); ctx.ellipse(x, y, 40, 14, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.ellipse(x + 20, y - 9, 24, 12, 0, 0, Math.PI * 2); ctx.fill(); break;
+        }
+      }
+    }
+    ctx.restore();
+  }
+
+  function drawParts(){
+    ctx.save();
+    for (const q of S.parts){
+      const k = q.life / q.max;
+      if (q.kind === 'flame'){
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.globalAlpha = 1 - k;
+        ctx.fillStyle = 'hsl(' + (50 - 50 * k) + ',100%,' + (62 - 15 * k) + '%)';
+        ctx.beginPath(); ctx.arc(q.x, q.y - S.camY, q.size * (1 - k * 0.7), 0, Math.PI * 2); ctx.fill();
+      } else {
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 1 - k;
+        ctx.fillStyle = q.life % 6 < 3 ? C.gold : '#ffffff';
+        star5(ctx, q.x, q.y - S.camY, q.size, q.spin + q.life * 0.2);
+      }
+    }
+    ctx.restore();
+  }
+
+  function drawWall(x0, th){
     const bh = 18;
     const startY = Math.floor(S.camY / bh) * bh;
     for (let wy = startY; wy < S.camY + H; wy += bh){
       const sy = wy - S.camY;
       const r = Math.round(wy / bh);
-      ctx.fillStyle = (r & 1) ? C.brick : C.brick2;
+      ctx.fillStyle = th.rainbow ? 'hsl(' + (((r * 24) % 360 + 360) % 360) + ',75%,66%)' : ((r & 1) ? th.b1 : th.b2);
       ctx.fillRect(x0, sy, WALL, bh);
-      ctx.fillStyle = C.mortar;
+      ctx.fillStyle = th.mortar;
       ctx.fillRect(x0, sy, WALL, 2);
       ctx.fillRect(x0 + ((r & 1) ? WALL * 0.3 : WALL * 0.7), sy, 2, bh);
     }
@@ -477,13 +653,14 @@ button,.btn{font:inherit;cursor:pointer}
   function drawPlat(pl){
     const sy = pl.y - S.camY;
     if (sy < -30 || sy > H + 40) return;
-    const top = pl.big ? C.gold : C.ice;
-    ctx.fillStyle = C.iceDeep;
+    const th = themeAt(pl.n);
+    const top = pl.big ? C.gold : th.plat;
+    ctx.fillStyle = th.deep;
     rr(ctx, pl.x, sy + 4, pl.w, 10, 5); ctx.fill();
     ctx.fillStyle = top;
     rr(ctx, pl.x, sy, pl.w, 9, 5); ctx.fill();
     // icicles
-    ctx.fillStyle = C.iceDeep;
+    ctx.fillStyle = th.deep;
     const seed = pl.seed || 0.5;
     for (let k = 10; k < pl.w - 6; k += 17){
       const len = 5 + ((k * 7.3 + seed * 100) % 9);
@@ -512,29 +689,31 @@ button,.btn{font:inherit;cursor:pointer}
 
   function draw(){
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
-    const g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, C.night); g.addColorStop(1, C.dusk);
-    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-
-    // stars drift slower than the tower for depth
-    ctx.fillStyle = 'rgba(243,246,255,.55)';
-    for (let i = 0; i < 55; i++){
-      const sx = (i * 97.31) % W;
-      const sy = (((i * 137.7) - S.camY * 0.15) % H + H) % H;
-      ctx.fillRect(sx, sy, i % 3 === 0 ? 2 : 1.2, i % 3 === 0 ? 2 : 1.2);
-    }
+    // sky and drifting decor fade from one world into the next near each 100th floor
+    const [A, B, t] = viewThemes();
+    drawSky(A);
+    if (t > 0){ ctx.globalAlpha = t; drawSky(B); ctx.globalAlpha = 1; }
+    drawDecor(A, 1 - t);
+    drawDecor(B, t);
 
     for (const pl of S.plats) drawPlat(pl);
+    drawParts();
 
     const p = S.p;
+    let rot = 0;
+    if (p.flip !== null){
+      const k = Math.min(1, p.flip / p.flipDur);
+      rot = (1 - (1 - k) * (1 - k)) * Math.PI * 2 * p.dir;
+    }
     const stretch = p.grounded ? 0 : Math.min(0.15, Math.abs(p.vy) * 0.012);
     const sq = p.squash;
     drawClimber(ctx, p.x, p.y - S.camY, {
-      dir: p.dir, anim: p.anim, grounded: p.grounded,
+      dir: p.dir, anim: p.anim, grounded: p.grounded, rot,
       sx: 1 + sq * 0.18 - stretch, sy: 1 - sq * 0.18 + stretch
     });
 
-    drawWall(0); drawWall(W - WALL);
+    drawWall(0, A); drawWall(W - WALL, A);
+    if (t > 0){ ctx.globalAlpha = t; drawWall(0, B); drawWall(W - WALL, B); ctx.globalAlpha = 1; }
 
     if (mode === 'menu') return;
 
@@ -551,7 +730,7 @@ button,.btn{font:inherit;cursor:pointer}
 
     for (const u of S.popups){
       ctx.globalAlpha = Math.min(1, u.life / 25);
-      hudText(u.text, Math.min(W - 80, Math.max(80, u.x)), u.y - S.camY, 18, 'center', u.color);
+      hudText(u.text, Math.min(W - 100, Math.max(100, u.x)), u.y - S.camY, 18, 'center', u.color);
       ctx.globalAlpha = 1;
     }
 
