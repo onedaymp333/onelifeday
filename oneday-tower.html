@@ -35,9 +35,17 @@ h2{font-size:2.1rem}
 .how{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:8px;text-align:left}
 .how li{background:rgba(200,243,255,.08);border-radius:10px;padding:8px 10px;font-size:.88rem;line-height:1.3;color:var(--muted);min-width:0}
 .how b{display:block;color:var(--text);font-weight:800}
-.char{display:flex;align-items:center;gap:14px;text-align:left}
-#pv{width:84px;height:84px;flex:none;border-radius:14px;background:rgba(200,243,255,.08)}
-.char-actions{display:flex;flex-direction:column;gap:8px;min-width:0;flex:1}
+.pick{display:flex;flex-direction:column;gap:8px;text-align:left;min-width:0}
+.pick-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:4px 10px}
+.pick-head b{font-family:var(--display);font-weight:400;font-size:1.1rem;color:var(--gold)}
+.pick-head span{font-size:.78rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.roster{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 8px;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch}
+.ch{flex:none;width:74px;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 4px;border-radius:12px;border:2px solid transparent;background:rgba(200,243,255,.08);color:var(--text);font-size:.68rem;font-weight:800;scroll-snap-align:start}
+.ch canvas{width:58px;height:58px}
+.ch span{max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ch[aria-selected="true"]{border-color:var(--gold);background:rgba(255,210,122,.14)}
+.ch.locked{cursor:default;color:var(--muted)}
+.char-actions{display:flex;flex-direction:column;gap:8px;min-width:0}
 .vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 button,.btn{font:inherit;cursor:pointer}
 .primary{font-family:var(--display);font-size:1.35rem;padding:14px;border-radius:14px;border:0;background:var(--hoodie);color:#2a1300;box-shadow:0 5px 0 var(--hoodie-deep);transition:transform .08s}
@@ -78,17 +86,19 @@ button,.btn{font:inherit;cursor:pointer}
         <li><b>Tap as you land</b>for a perfect flip</li>
         <li><b>Grab a rocket</b>fly up for 10 seconds</li>
         <li><b>Every 100 floors</b>a brand new world</li>
+        <li><b>Every 250 floors</b>unlock a new character</li>
       </ul>
-      <div class="char">
-        <canvas id="pv" width="168" height="168" aria-label="Your character"></canvas>
+      <div class="pick">
+        <div class="pick-head"><b id="charName">OneDay</b><span id="unlockNote"></span></div>
+        <div id="roster" class="roster" role="listbox" aria-label="Characters"></div>
         <div class="char-actions">
-          <label class="ghost btn" for="file">Upload your character</label>
+          <label class="ghost btn" for="file">Upload your own photo</label>
           <input id="file" class="vh" type="file" accept="image/*">
           <div id="modes" class="seg" role="group" aria-label="How to use your picture" hidden>
             <button type="button" data-mode="face" aria-pressed="false">Face on body</button>
             <button type="button" data-mode="full" aria-pressed="false">Whole thing</button>
           </div>
-          <button id="reset" type="button" class="link" hidden>Back to the default climber</button>
+          <button id="reset" type="button" class="link" hidden>Remove my photo</button>
         </div>
       </div>
       <p id="err" class="err" hidden></p>
@@ -101,6 +111,7 @@ button,.btn{font:inherit;cursor:pointer}
     <div class="card">
       <h2>You fell!</h2>
       <p id="nb" class="newbest" hidden>New best score</p>
+      <p id="unl" class="newbest" hidden></p>
       <div class="stats">
         <div class="stat"><span>Floor</span><b id="sFloor">0</b></div>
         <div class="stat"><span>Score</span><b id="sScore">0</b></div>
@@ -142,7 +153,7 @@ button,.btn{font:inherit;cursor:pointer}
     { key:'candy',   name:'CANDY LAND',    top:'#ffd6ec', bot:'#c9f2ff', decor:'sprinkles' },
     { key:'space',   name:'OUTER SPACE',   top:'#000004', bot:'#1b0b3a', decor:'galaxy' },
     { key:'neon',    name:'NEON CITY',     top:'#0a0014', bot:'#2a0040', decor:'rain' },
-    { key:'golden',  name:'GOLDEN CLOUDS', top:'#f7c25e', bot:'#d26f22', decor:'clouds' }
+    { key:'golden',  name:'GOLDEN CLOUDS', top:'#ffe9a8', bot:'#ffb84d', decor:'clouds' }
   ];
   const RAINBOW = ['#ffb3c7','#ffd59e','#fff3a3','#bff5b0','#aee3ff','#d2b8ff'];
   const RB_BOLD = ['#ff5e7e','#ffa34d','#ffe14d','#5fdc6b','#4db8ff','#9b6bff'];
@@ -287,11 +298,103 @@ button,.btn{font:inherit;cursor:pointer}
   });
   paintMute();
 
-  // ---------- character ----------
+  // ---------- characters ----------
+  // Photo faces for the main crew, cut from the pictures Eric sent.
+  const FACES = {
+    eric: "data:image/jpeg;base64,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",
+    her: "data:image/jpeg;base64,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",
+    kid: "data:image/jpeg;base64,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",
+  };
+  const faceImg = {};
+  for (const k in FACES){ const im = new Image(); im.onload = () => paintCharUI(); im.src = FACES[k]; faceImg[k] = im; }
+
+  // The main crew is always playable.
+  const MAIN = [
+    { id:'oneday', name:'OneDay', kind:'human', build:'big', skin:'#c48a63', face:'eric', beard:true, hair:{ style:'bald', color:'#2a1c14' },
+      top:{ style:'shirt', color:'#7a4a22', trim:'#161616' }, bottom:{ style:'pants', color:'#cdbf9f' }, shoes:'#1b1b1f', extra:'phone' },
+    { id:'green', name:'Green Dress', kind:'human', build:'slim', skin:'#e6b996', face:'her', hair:{ style:'bun', color:'#2b2018' },
+      top:{ style:'dress', color:'#1f8a4c', color2:'#ffffff' }, shoes:'sandal', extra:'necklace' },
+    { id:'whitetee', name:'White Tee', kind:'human', build:'kid', skin:'#a8724d', face:'kid', hair:{ style:'curly', color:'#1a1410' },
+      top:{ style:'tee', color:'#ece6d6' }, bottom:{ style:'pants', color:'#8a8b6c' }, shoes:'#ff4b2b' },
+    { id:'jersey', name:'Blue Jersey', kind:'human', build:'kid', skin:'#c99670', hair:{ style:'short', color:'#1a1410' },
+      top:{ style:'jersey', color:'#1e5bd8', trim:'#ffffff' }, bottom:{ style:'shorts', color:'#141418' }, shoes:'#ff4b2b' },
+    { id:'classic', name:'Classic', kind:'classic' }
+  ];
+
+  // Unlocked one at a time, every 250 floors climbed in total. After these run out, new ones are generated forever.
+  const UNLOCKS = [
+    { name:'Panda',      kind:'animal', species:'panda',   body:'#f6f6f2', belly:'#ffffff', limb:'#1c1c22' },
+    { name:'Fox',        kind:'animal', species:'fox',     body:'#f07a2a', belly:'#fff4e6', limb:'#3a2418' },
+    { name:'Penguin',    kind:'animal', species:'penguin', body:'#1f2230', belly:'#ffffff', limb:'#ff9a1f' },
+    { name:'Frog',       kind:'animal', species:'frog',    body:'#4fbf4a', belly:'#c9f0a0', limb:'#3a9a36' },
+    { name:'Tiger',      kind:'animal', species:'tiger',   body:'#f59a2a', belly:'#fff4e0', limb:'#f59a2a' },
+    { name:'Astronaut',  kind:'human', build:'adult', skin:'#d9a27a', hair:{ style:'helmet', color:'#ffffff' },
+      top:{ style:'space', color:'#eef0f6', trim:'#e8173a' }, bottom:{ style:'pants', color:'#dfe2ea' }, shoes:'#8b8fa6' },
+    { name:'Bunny',      kind:'animal', species:'bunny',   body:'#f2eef0', belly:'#ffffff', limb:'#f2eef0' },
+    { name:'Owl',        kind:'animal', species:'owl',     body:'#8a6040', belly:'#e8d2b0', limb:'#f0b23a' },
+    { name:'Ninja',      kind:'human', build:'adult', skin:'#d0a07a', hair:{ style:'mask', color:'#16161c' },
+      top:{ style:'gi', color:'#1c1c24', trim:'#e8173a' }, bottom:{ style:'pants', color:'#1c1c24' }, shoes:'#16161c' },
+    { name:'Unicorn',    kind:'animal', species:'unicorn', body:'#ffffff', belly:'#fdf3ff', limb:'#ffffff' },
+    { name:'Dino',       kind:'animal', species:'dino',    body:'#5cbf5a', belly:'#f4e27a', limb:'#4aa34a', accent:'#ff7a3d' },
+    { name:'Koala',      kind:'animal', species:'koala',   body:'#9aa0aa', belly:'#e6e8ee', limb:'#9aa0aa' },
+    { name:'Monkey',     kind:'animal', species:'monkey',  body:'#8a5a34', belly:'#f0c99a', limb:'#8a5a34' },
+    { name:'Pig',        kind:'animal', species:'pig',     body:'#ffb0c4', belly:'#ffd0dc', limb:'#ffb0c4' },
+    { name:'Puppy',      kind:'animal', species:'dog',     body:'#d9a066', belly:'#fff0dc', limb:'#d9a066', accent:'#7a4a22' },
+    { name:'Cat',        kind:'animal', species:'cat',     body:'#9a9aa6', belly:'#f0f0f4', limb:'#9a9aa6' },
+    { name:'Bear',       kind:'animal', species:'bear',    body:'#7a4e2c', belly:'#d9b48a', limb:'#7a4e2c' }
+  ];
+  const SPECIES = ['panda','fox','penguin','frog','tiger','bunny','owl','unicorn','dino','koala','monkey','pig','dog','cat','bear'];
+  const SPECIES_NAME = { panda:'Panda', fox:'Fox', penguin:'Penguin', frog:'Frog', tiger:'Tiger', bunny:'Bunny', owl:'Owl', unicorn:'Unicorn',
+    dino:'Dino', koala:'Koala', monkey:'Monkey', pig:'Pig', dog:'Pup', cat:'Cat', bear:'Bear' };
+  const ADJ = ['Cosmic','Turbo','Lucky','Mighty','Neon','Frosty','Golden','Shadow','Sunny','Jumbo','Pixel','Thunder','Velvet','Rocket','Mystic','Blazing','Groovy','Stormy','Crystal','Midnight'];
+  const SKINS = ['#f2c9a0','#e6b996','#d9a27a','#c48a63','#a8724d','#8a5a3a','#6b4430'];
+  const HAIRS = ['short','curly','bun','bald','beanie','long'];
+  const TOPS = ['tee','hoodie','jersey','shirt'];
+  const hsl = (h, s, l) => 'hsl(' + h + ',' + s + '%,' + l + '%)';
+
+  const UNLOCK_EVERY = 250;
+  function unlockable(u){
+    if (u <= UNLOCKS.length) return Object.assign({ id:'u' + u, unlockAt: u * UNLOCK_EVERY }, UNLOCKS[u - 1]);
+    const R = rng(u * 9973 + 17);
+    const h = Math.floor(R() * 360);
+    if (R() < 0.7){
+      const sp = pick(R, SPECIES);
+      return { id:'u' + u, unlockAt: u * UNLOCK_EVERY, name: pick(R, ADJ) + ' ' + SPECIES_NAME[sp], kind:'animal', species: sp,
+        body: hsl(h, 60, 58), belly: hsl(h, 70, 88), limb: hsl(h, 55, 45), accent: hsl((h + 160) % 360, 75, 55) };
+    }
+    return { id:'u' + u, unlockAt: u * UNLOCK_EVERY, name: pick(R, ADJ) + ' ' + pick(R, ['Climber','Jumper','Hopper','Runner','Flyer']),
+      kind:'human', build: pick(R, ['adult','slim','big','kid']), skin: pick(R, SKINS), beard: R() < 0.25,
+      hair:{ style: pick(R, HAIRS), color: pick(R, ['#1a1410','#4a2c1a','#c98a3a','#e8d27a','#b8452a', hsl(h, 70, 55)]) },
+      top:{ style: pick(R, TOPS), color: hsl(h, 65, 52), trim: hsl((h + 180) % 360, 70, 60) },
+      bottom:{ style: pick(R, ['pants','shorts']), color: hsl((h + 200) % 360, 35, 28) }, shoes: hsl((h + 90) % 360, 70, 50) };
+  }
+
+  let totalFloors = parseInt(store.get('odt.total') || '0', 10) || 0;
+  const unlockedCount = t => Math.floor(t / UNLOCK_EVERY);
   let charImg = null, charMode = store.get('odt.mode') || 'face';
+  let charId = store.get('odt.charId') || (store.get('odt.char') ? 'photo' : 'oneday');
+  const PHOTO = { id:'photo', name:'Your photo', kind:'photo' };
+
+  function roster(){
+    const list = MAIN.slice();
+    if (charImg) list.splice(MAIN.length, 0, PHOTO);
+    const n = unlockedCount(totalFloors);
+    for (let u = 1; u <= n + 3; u++) list.push(Object.assign(unlockable(u), { locked: u > n }));
+    return list;
+  }
+  function findChar(id){
+    if (id === 'photo') return charImg ? PHOTO : MAIN[0];
+    const m = MAIN.find(c => c.id === id);
+    if (m) return m;
+    const u = parseInt(String(id).slice(1), 10);
+    if (id[0] === 'u' && u >= 1 && u <= unlockedCount(totalFloors)) return unlockable(u);
+    return MAIN[0];
+  }
+  let current = findChar(charId);
+
   function useImage(data){
     const im = new Image();
-    im.onload = () => { charImg = im; paintCharUI(); };
+    im.onload = () => { charImg = im; current = findChar(charId); paintCharUI(); };
     im.src = data;
   }
   const saved = store.get('odt.char');
@@ -312,8 +415,10 @@ button,.btn{font:inherit;cursor:pointer}
       const isPng = /png|webp|gif/i.test(f.type);
       const data = isPng ? c.toDataURL('image/png') : c.toDataURL('image/jpeg', 0.9);
       charMode = isPng ? 'full' : 'face';
+      charId = 'photo';
       store.set('odt.char', data);
       store.set('odt.mode', charMode);
+      store.set('odt.charId', charId);
       useImage(data);
       URL.revokeObjectURL(url);
       $('file').value = '';
@@ -329,31 +434,254 @@ button,.btn{font:inherit;cursor:pointer}
     charMode = b.dataset.mode; store.set('odt.mode', charMode); paintCharUI();
   }));
   $('reset').addEventListener('click', () => {
-    charImg = null; store.del('odt.char'); paintCharUI();
+    charImg = null; store.del('odt.char');
+    if (charId === 'photo'){ charId = 'oneday'; store.set('odt.charId', charId); }
+    current = findChar(charId);
+    paintCharUI();
   });
-  function paintCharUI(){
-    $('modes').hidden = !charImg;
-    $('reset').hidden = !charImg;
-    document.querySelectorAll('#modes button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === charMode)));
-    const pv = $('pv'), p = pv.getContext('2d');
-    p.setTransform(1,0,0,1,0,0);
-    p.clearRect(0,0,pv.width,pv.height);
-    p.setTransform(2.1,0,0,2.1,0,0);
-    drawClimber(p, 40, 74, { dir:1, sx:1, sy:1, anim:0, grounded:true });
+
+  function paintCard(cv2, ch){
+    const p = cv2.getContext('2d');
+    p.setTransform(1, 0, 0, 1, 0, 0);
+    p.clearRect(0, 0, cv2.width, cv2.height);
+    const k = cv2.width / 64;
+    p.setTransform(k, 0, 0, k, 0, 0);
+    p.save(); p.translate(32, 61); p.scale(0.78, 0.78);
+    drawCharacter(p, 0, 0, { dir:1, sx:1, sy:1, anim:0, grounded:true }, ch);
+    p.restore();
+    if (ch.locked){
+      p.setTransform(1, 0, 0, 1, 0, 0);
+      p.globalCompositeOperation = 'source-atop';
+      p.fillStyle = 'rgba(11,16,48,.92)'; p.fillRect(0, 0, cv2.width, cv2.height);
+      p.globalCompositeOperation = 'source-over';
+    }
   }
 
-  // Draws the climber with feet at (x, y).
-  function drawClimber(c, x, y, o){
-    const rot = o.rot || 0;
-    if (charImg && charMode === 'full'){
-      const box = 62, k = Math.min(box / charImg.width, box / charImg.height);
-      const w = charImg.width * k, h = charImg.height * k;
-      c.save(); c.translate(x, y - 30); c.rotate(rot); c.translate(0, 30); c.scale(o.dir * o.sx, o.sy);
-      c.drawImage(charImg, -w / 2, -h, w, h);
+  function paintCharUI(){
+    const list = roster();
+    const box = $('roster');
+    box.textContent = '';
+    for (const ch of list){
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'ch' + (ch.locked ? ' locked' : '');
+      b.setAttribute('role', 'option');
+      b.setAttribute('aria-selected', String(!ch.locked && ch.id === current.id));
+      const c2 = document.createElement('canvas'); c2.width = 128; c2.height = 128;
+      paintCard(c2, ch);
+      const label = document.createElement('span');
+      label.textContent = ch.locked ? ch.unlockAt + ' floors' : ch.name;
+      b.append(c2, label);
+      b.setAttribute('aria-label', ch.locked ? 'Locked. Unlocks at ' + ch.unlockAt + ' total floors' : ch.name);
+      if (ch.locked) b.disabled = true;
+      else b.addEventListener('click', () => { current = ch; charId = ch.id; store.set('odt.charId', charId); paintCharUI(); });
+      box.append(b);
+    }
+    $('charName').textContent = current.name;
+    const next = (unlockedCount(totalFloors) + 1) * UNLOCK_EVERY;
+    $('unlockNote').textContent = totalFloors + ' floors climbed · next unlock at ' + next;
+    const isPhoto = current.id === 'photo';
+    $('modes').hidden = !isPhoto;
+    $('reset').hidden = !charImg;
+    document.querySelectorAll('#modes button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === charMode)));
+    const sel = box.querySelector('[aria-selected="true"]');
+    if (sel) box.scrollLeft = Math.max(0, sel.offsetLeft - box.offsetLeft - 8);
+  }
+
+  // ---------- drawing the characters ----------
+  // Every character is drawn facing right with feet at the origin; the caller mirrors and rotates.
+  function drawLegs(c, o, s, legCol, skin, short){
+    const sw = o.grounded ? Math.sin(o.anim) * 5 : 0, tuck = o.grounded ? 0 : 4;
+    for (const [lx, d] of [[-8, 1], [1, -1]]){
+      const x = lx + sw * d;
+      if (short){
+        c.fillStyle = legCol; rr(c, x, -16 + tuck, 7, 7, 3); c.fill();
+        c.fillStyle = skin; rr(c, x + 1, -10 + tuck, 5, 8 - tuck, 2); c.fill();
+      } else {
+        c.fillStyle = legCol; rr(c, x, -16 + tuck, 7, 14 - tuck, 3); c.fill();
+      }
+      if (s.shoes === 'sandal'){
+        c.fillStyle = skin; rr(c, x - 1, -4, 9, 4, 2); c.fill();
+        c.fillStyle = '#f4ead8'; c.fillRect(x, -4, 7, 1.8);
+      } else {
+        c.fillStyle = s.shoes || '#f3f6ff'; rr(c, x - 1, -4, 10, 5, 2); c.fill();
+        c.fillStyle = 'rgba(255,255,255,.5)'; c.fillRect(x - 1, -0.8, 10, 1);
+      }
+    }
+  }
+
+  function drawHumanBody(c, o, s){
+    const bw = s.build === 'big' ? 32 : s.build === 'slim' ? 22 : s.build === 'kid' ? 24 : 26, half = bw / 2;
+    const top = s.top, sw = o.grounded ? Math.sin(o.anim) * 5 : 0;
+    if (top.style === 'dress'){
+      drawLegs(c, o, s, s.skin, s.skin, false);
+      c.fillStyle = top.color;
+      c.beginPath(); c.moveTo(-half, -26); c.lineTo(half, -26); c.lineTo(half + 6, -6); c.lineTo(-half - 6, -6); c.closePath(); c.fill();
+      rr(c, -half, -38, bw, 14, 6); c.fill();
+      c.save(); c.beginPath(); c.moveTo(-half, -26); c.lineTo(half, -26); c.lineTo(half + 6, -6); c.lineTo(-half - 6, -6); c.closePath(); c.rect(-half, -38, bw, 14); c.clip();
+      // white lattice with little orange flower centers, like the real dress
+      for (let row = 0, y = -37; y < -5; y += 4.5, row++){
+        for (let x = -half - 6 + (row % 2 ? 2.25 : 0); x < half + 6; x += 4.5){
+          c.fillStyle = top.color2; c.beginPath(); c.moveTo(x, y - 1.8); c.lineTo(x + 1.8, y); c.lineTo(x, y + 1.8); c.lineTo(x - 1.8, y); c.closePath(); c.fill();
+          c.fillStyle = '#e8743a'; c.fillRect(x - 0.5, y - 0.5, 1, 1);
+        }
+      }
       c.restore();
+      c.fillStyle = s.skin; rr(c, -half + 3, -40, 4, 6, 2); c.fill(); rr(c, half - 7, -40, 4, 6, 2); c.fill();
+    } else {
+      drawLegs(c, o, s, s.bottom.color, s.skin, s.bottom.style === 'shorts');
+      c.fillStyle = top.color;
+      rr(c, -half, -39, bw, 26, 8); c.fill();
+      c.fillStyle = 'rgba(0,0,0,.12)'; rr(c, -half, -18, bw, 5, 3); c.fill();
+      if (top.style === 'shirt'){
+        c.fillStyle = 'rgba(0,0,0,.25)';
+        c.beginPath(); c.moveTo(-4, -39); c.lineTo(0, -33); c.lineTo(4, -39); c.closePath(); c.fill();
+        c.fillStyle = top.trim; c.fillRect(1.5, -34, 1.6, 20);
+        c.fillStyle = 'rgba(0,0,0,.18)'; c.fillRect(half - 10, -33, 7, 6); c.fillRect(-half + 3, -33, 7, 6);
+      } else if (top.style === 'tee'){
+        c.strokeStyle = 'rgba(0,0,0,.18)'; c.lineWidth = 1.5;
+        c.beginPath(); c.arc(0, -39, 4.5, 0, Math.PI); c.stroke();
+      } else if (top.style === 'jersey'){
+        c.fillStyle = top.trim;
+        c.beginPath(); c.moveTo(-4, -39); c.lineTo(0, -34); c.lineTo(4, -39); c.lineTo(2.6, -39); c.lineTo(0, -36); c.lineTo(-2.6, -39); c.closePath(); c.fill();
+        for (let k = 0; k < 3; k++) c.fillRect(-half + 1, -36 + k * 2.4, 6, 1.1);
+        c.fillStyle = 'rgba(255,255,255,.85)'; c.font = '7px ' + FONT; c.textAlign = 'center'; c.fillText('10', 2, -21);
+      } else if (top.style === 'hoodie'){
+        c.fillStyle = top.trim || C.gold; c.fillRect(-half, -32, bw, 4);
+      } else if (top.style === 'space'){
+        c.fillStyle = '#c9ccd9'; rr(c, -5, -34, 12, 9, 2); c.fill();
+        c.fillStyle = top.trim; c.fillRect(-3, -32, 3, 2); c.fillStyle = '#29a3ff'; c.fillRect(1, -32, 3, 2);
+        c.fillStyle = '#ffcc00'; c.fillRect(-3, -28, 7, 1.5);
+      } else if (top.style === 'gi'){
+        c.fillStyle = top.trim; c.fillRect(-half, -21, bw, 3);
+        c.strokeStyle = 'rgba(255,255,255,.2)'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(-5, -39); c.lineTo(3, -22); c.stroke();
+      }
+    }
+    if (s.extra === 'necklace'){ c.strokeStyle = '#e8b84a'; c.lineWidth = 1; c.beginPath(); c.arc(0, -40, 5, 0.2, Math.PI - 0.2); c.stroke(); }
+    // arm, with a phone in hand if this character carries one
+    c.save(); c.translate(2, -34); c.rotate(o.grounded ? -sw * 0.08 : -2.2);
+    c.fillStyle = top.style === 'dress' ? s.skin : top.color;
+    rr(c, -3, 0, 7, top.style === 'tee' || top.style === 'jersey' || top.style === 'shirt' ? 8 : 15, 3); c.fill();
+    c.fillStyle = s.skin;
+    if (top.style === 'tee' || top.style === 'jersey' || top.style === 'shirt' || top.style === 'dress') { rr(c, -2.5, top.style === 'dress' ? 0 : 7, 6, top.style === 'dress' ? 15 : 8, 3); c.fill(); }
+    if (s.extra === 'phone'){ c.fillStyle = '#ff7a2e'; rr(c, -3, 12, 7, 9, 1.5); c.fill(); c.fillStyle = '#1b1b1f'; c.fillRect(-1.5, 13.5, 2.5, 2.5); }
+    c.restore();
+  }
+
+  function drawHumanHead(c, s){
+    const hs = s.hair.style, hc = s.hair.color;
+    if (hs === 'helmet'){
+      c.fillStyle = '#ffffff'; c.beginPath(); c.arc(0, -49, 16, 0, TAU); c.fill();
+      c.fillStyle = '#1f3a7a'; c.beginPath(); c.ellipse(3, -48, 10, 9, 0, 0, TAU); c.fill();
+      c.fillStyle = 'rgba(255,255,255,.55)'; c.beginPath(); c.ellipse(6, -52, 3, 2, -0.5, 0, TAU); c.fill();
+      c.strokeStyle = '#c9ccd9'; c.lineWidth = 1.5; c.beginPath(); c.arc(0, -49, 16, 0, TAU); c.stroke();
       return;
     }
-    c.save(); c.translate(x, y - 30); c.rotate(rot); c.translate(0, 30); c.scale(o.dir * o.sx, o.sy);
+    if (hs === 'long' || hs === 'bun'){ c.fillStyle = hc; rr(c, -13, -56, 12, hs === 'long' ? 26 : 10, 5); c.fill(); }
+    c.fillStyle = s.skin; c.beginPath(); c.arc(0, -48, 12, 0, TAU); c.fill();
+    if (hs === 'mask'){
+      c.fillStyle = hc; c.beginPath(); c.arc(0, -48, 12.5, 0, TAU); c.fill();
+      c.fillStyle = s.skin; rr(c, -2, -50, 14, 5, 2.5); c.fill();
+      c.fillStyle = '#e8173a'; c.fillRect(-13, -54, 6, 3); c.fillRect(-17, -54, 5, 2); c.fillRect(-17, -51, 5, 2);
+      c.fillStyle = C.night; c.fillRect(4, -49, 2.5, 2.5); c.fillRect(8.5, -49, 2.5, 2.5);
+      return;
+    }
+    if (s.beard){ c.fillStyle = s.hair.color; c.beginPath(); c.arc(1, -46, 12, 0.15, Math.PI - 0.4); c.fill(); c.fillStyle = s.skin; c.beginPath(); c.ellipse(3, -45, 7, 3.5, 0, 0, TAU); c.fill(); }
+    c.fillStyle = hc;
+    if (hs === 'short'){ c.beginPath(); c.arc(-1, -50, 12.5, Math.PI * 0.95, Math.PI * 2.02); c.fill(); for (const fx of [-6, -2, 2]){ c.beginPath(); c.moveTo(fx - 3, -52); c.lineTo(fx + 1, -49); c.lineTo(fx + 3, -52); c.closePath(); c.fill(); } c.fillRect(-13, -52, 5, 9); }
+    else if (hs === 'curly'){ for (let k = 0; k < 9; k++){ const a = Math.PI + k * Math.PI / 8; c.beginPath(); c.arc(Math.cos(a) * 11 - 1, -50 + Math.sin(a) * 11, 4.2, 0, TAU); c.fill(); } }
+    else if (hs === 'bun' || hs === 'long'){ c.beginPath(); c.arc(0, -50, 12.5, Math.PI * 0.9, Math.PI * 2.02); c.fill(); if (hs === 'bun'){ c.beginPath(); c.arc(-11, -57, 5, 0, TAU); c.fill(); } }
+    else if (hs === 'beanie'){ c.fillStyle = s.top.trim || C.ice; c.beginPath(); c.arc(0, -50, 12.5, Math.PI, 0); c.fill(); c.fillRect(-13, -51, 26, 4); c.beginPath(); c.arc(0, -63, 4, 0, TAU); c.fill(); }
+    else if (hs === 'bald'){ c.fillStyle = 'rgba(255,255,255,.3)'; c.beginPath(); c.ellipse(-2, -56, 4, 2, -0.3, 0, TAU); c.fill(); }
+    c.fillStyle = C.night; c.fillRect(3, -48, 2.6, 3.4); c.fillRect(8, -48, 2.6, 3.4);
+    c.strokeStyle = C.night; c.lineWidth = 1.2; c.beginPath(); c.arc(7, -43.5, 3, 0.2, Math.PI - 0.6); c.stroke();
+  }
+
+  function drawAnimal(c, o, s){
+    const sp = s.species, sw = o.grounded ? Math.sin(o.anim) * 4 : 0, tuck = o.grounded ? 0 : 3;
+    const body = s.body, belly = s.belly, limb = s.limb || body, acc = s.accent || '#ff7a3d';
+    const ell = (x, y, rx, ry, col, rot) => { c.fillStyle = col; c.beginPath(); c.ellipse(x, y, rx, ry, rot || 0, 0, TAU); c.fill(); };
+    // tails sit behind the body
+    if (sp === 'fox'){ ell(-15, -18, 9, 5.5, body, -0.6); ell(-21, -23, 4, 3, '#ffffff', -0.6); }
+    else if (sp === 'cat' || sp === 'tiger' || sp === 'monkey'){
+      c.strokeStyle = sp === 'monkey' ? limb : body; c.lineWidth = 3.5; c.lineCap = 'round';
+      c.beginPath(); c.moveTo(-10, -16); c.quadraticCurveTo(-22, -18, -18, -32); if (sp === 'monkey') c.arc(-15, -32, 3, Math.PI, 0); c.stroke();
+      if (sp === 'tiger'){ c.strokeStyle = '#1c1c22'; c.lineWidth = 1.4; for (const t of [0.35, 0.6, 0.85]){ c.beginPath(); c.arc(-10 - t * 10, -17 - t * 12, 2.4, 0, Math.PI); c.stroke(); } }
+    }
+    else if (sp === 'bunny'){ ell(-12, -16, 4.5, 4.5, '#ffffff'); }
+    else if (sp === 'pig'){ c.strokeStyle = body; c.lineWidth = 2; c.beginPath(); c.arc(-14, -18, 3, 0, Math.PI * 1.6); c.stroke(); }
+    else if (sp === 'dino'){ c.fillStyle = body; c.beginPath(); c.moveTo(-8, -22); c.quadraticCurveTo(-24, -12, -26, -6); c.quadraticCurveTo(-16, -10, -6, -12); c.closePath(); c.fill(); }
+    else if (sp === 'unicorn'){ for (let k = 0; k < 4; k++){ c.strokeStyle = RB_BOLD[k + 1]; c.lineWidth = 2.5; c.beginPath(); c.moveTo(-10, -18 + k); c.quadraticCurveTo(-20, -14 + k * 2, -18, -4 + k); c.stroke(); } }
+    else if (sp === 'dog'){ c.strokeStyle = body; c.lineWidth = 3; c.lineCap = 'round'; c.beginPath(); c.moveTo(-11, -20); c.lineTo(-17, -27); c.stroke(); }
+    // feet
+    c.fillStyle = sp === 'penguin' ? limb : (sp === 'panda' ? limb : body);
+    rr(c, -8 + sw, -8 + tuck, 7, 8 - tuck, 3); c.fill();
+    rr(c, 1 - sw, -8 + tuck, 7, 8 - tuck, 3); c.fill();
+    // body and belly
+    ell(0, -20, 13, 14, sp === 'panda' ? body : body);
+    if (sp === 'panda'){ c.fillStyle = limb; rr(c, -13, -30, 26, 7, 3); c.fill(); }
+    ell(3, -18, 8, 10, belly);
+    if (sp === 'tiger'){ c.strokeStyle = '#1c1c22'; c.lineWidth = 1.6; for (const y of [-28, -22, -16]){ c.beginPath(); c.moveTo(-12, y); c.lineTo(-6, y + 2); c.stroke(); } }
+    if (sp === 'dino'){ c.fillStyle = acc; for (let k = 0; k < 4; k++){ const y = -32 + k * 6; c.beginPath(); c.moveTo(-11, y); c.lineTo(-17, y + 3); c.lineTo(-11, y + 6); c.closePath(); c.fill(); } }
+    if (sp === 'owl'){ ell(-6, -20, 6, 10, limb === '#f0b23a' ? '#6a4630' : limb, 0.2); }
+    // arm
+    c.save(); c.translate(3, -27); c.rotate(o.grounded ? -sw * 0.1 : -2.2);
+    c.fillStyle = sp === 'penguin' ? body : (sp === 'owl' ? '#6a4630' : limb); rr(c, -3, 0, 6.5, 12, 3); c.fill();
+    c.restore();
+    // ears behind the head
+    const hx = 1, hy = -43;
+    if (sp === 'panda' || sp === 'bear' || sp === 'koala' || sp === 'monkey'){
+      const er = sp === 'koala' ? 7 : 4.8, ec = sp === 'panda' ? limb : body;
+      for (const ex of [-8, 8]){ ell(hx + ex, hy - 10, er, er, ec); ell(hx + ex, hy - 10, er * 0.55, er * 0.55, sp === 'panda' ? limb : belly); }
+    } else if (sp === 'fox' || sp === 'cat' || sp === 'tiger' || sp === 'pig'){
+      for (const ex of [-7, 6]){
+        c.fillStyle = body; c.beginPath(); c.moveTo(hx + ex - 5, hy - 8); c.lineTo(hx + ex + 1, hy - (sp === 'pig' ? 17 : 21)); c.lineTo(hx + ex + 6, hy - 8); c.closePath(); c.fill();
+        c.fillStyle = sp === 'fox' ? '#3a2418' : '#ffb0c4'; c.beginPath(); c.moveTo(hx + ex - 2, hy - 9); c.lineTo(hx + ex + 1, hy - (sp === 'pig' ? 14 : 17)); c.lineTo(hx + ex + 3.5, hy - 9); c.closePath(); c.fill();
+      }
+    } else if (sp === 'bunny'){
+      for (const ex of [-5, 4]){ ell(hx + ex, hy - 20, 3.8, 11, body, ex * 0.03); ell(hx + ex, hy - 20, 1.8, 8, '#ffb0c4', ex * 0.03); }
+    } else if (sp === 'dog'){
+      ell(hx - 9, hy - 2, 4, 9, s.accent || '#7a4a22', 0.3);
+    } else if (sp === 'owl'){
+      for (const ex of [-8, 8]){ c.fillStyle = body; c.beginPath(); c.moveTo(hx + ex - 4, hy - 8); c.lineTo(hx + ex + (ex < 0 ? -3 : 3), hy - 17); c.lineTo(hx + ex + 4, hy - 8); c.closePath(); c.fill(); }
+    } else if (sp === 'unicorn'){
+      for (let k = 0; k < 5; k++){ ell(hx - 9 + k * 1.2, hy - 8 + k * 4, 4.5, 3.4, RB_BOLD[k], 0.5); }
+    }
+    // head
+    ell(hx, hy, 14, 13, sp === 'penguin' ? body : body);
+    if (sp === 'penguin'){ ell(hx + 4, hy + 2, 8, 8, belly); }
+    if (sp === 'monkey'){ ell(hx + 4, hy + 1, 8.5, 8.5, belly); }
+    if (sp === 'owl'){ ell(hx + 3, hy, 10, 9, belly); }
+    if (sp === 'tiger'){ c.strokeStyle = '#1c1c22'; c.lineWidth = 1.5; for (const dx of [-6, -1, 4]){ c.beginPath(); c.moveTo(hx + dx, hy - 13); c.lineTo(hx + dx + 1, hy - 8); c.stroke(); } }
+    if (sp === 'unicorn'){
+      c.fillStyle = '#f2c14e'; c.beginPath(); c.moveTo(hx + 3, hy - 11); c.lineTo(hx + 9, hy - 27); c.lineTo(hx + 9, hy - 10); c.closePath(); c.fill();
+      c.strokeStyle = 'rgba(255,255,255,.7)'; c.lineWidth = 0.8; for (let k = 0; k < 3; k++){ c.beginPath(); c.moveTo(hx + 4 + k * 1.6, hy - 13 - k * 4); c.lineTo(hx + 8.5, hy - 14 - k * 4); c.stroke(); }
+    }
+    if (sp === 'dino'){ c.fillStyle = acc; for (let k = 0; k < 3; k++){ c.beginPath(); c.moveTo(hx - 8 + k * 6, hy - 11); c.lineTo(hx - 5 + k * 6, hy - 18); c.lineTo(hx - 2 + k * 6, hy - 11); c.closePath(); c.fill(); } }
+    // face
+    if (sp === 'frog'){
+      for (const ex of [hx - 2, hx + 8]){ ell(ex, hy - 11, 5, 5, body); ell(ex, hy - 11, 3.6, 3.6, '#ffffff'); ell(ex + 1, hy - 11, 1.8, 1.8, '#111'); }
+      c.strokeStyle = '#1f5a1c'; c.lineWidth = 1.4; c.beginPath(); c.arc(hx + 5, hy, 6, 0.3, Math.PI - 0.5); c.stroke();
+      return;
+    }
+    if (sp === 'owl'){
+      for (const ex of [hx - 1, hx + 8]){ ell(ex, hy - 2, 4.6, 4.6, '#ffffff'); ell(ex, hy - 2, 2.6, 2.6, '#f0b23a'); ell(ex + 0.6, hy - 2, 1.4, 1.4, '#111'); }
+      c.fillStyle = '#f0b23a'; c.beginPath(); c.moveTo(hx + 2.5, hy + 2); c.lineTo(hx + 6, hy + 2); c.lineTo(hx + 4.2, hy + 6); c.closePath(); c.fill();
+      return;
+    }
+    if (sp !== 'penguin' && sp !== 'monkey') ell(hx + 7, hy + 3, 6.5, 4.8, sp === 'pig' ? body : belly);
+    if (sp === 'panda'){ ell(hx + 4, hy - 2, 3.4, 4.4, limb, 0.4); ell(hx + 10, hy - 2, 3, 4, limb, -0.3); }
+    const eyeCol = sp === 'panda' ? '#ffffff' : '#111';
+    ell(hx + 4, hy - 2, 1.7, 2.2, eyeCol); ell(hx + 10, hy - 2, 1.6, 2.1, eyeCol);
+    if (sp !== 'panda'){ c.fillStyle = 'rgba(255,255,255,.85)'; c.fillRect(hx + 4.3, hy - 3.4, 0.9, 0.9); c.fillRect(hx + 10.2, hy - 3.4, 0.9, 0.9); }
+    if (sp === 'penguin'){ c.fillStyle = limb; c.beginPath(); c.moveTo(hx + 10, hy + 1); c.lineTo(hx + 17, hy + 3); c.lineTo(hx + 10, hy + 5); c.closePath(); c.fill(); return; }
+    if (sp === 'pig'){ ell(hx + 12, hy + 3, 4.2, 3.4, '#ff8fab'); ell(hx + 11, hy + 3, 0.8, 1.2, '#7a2a3a'); ell(hx + 13.5, hy + 3, 0.8, 1.2, '#7a2a3a'); return; }
+    if (sp === 'koala'){ ell(hx + 11, hy + 1, 3, 4, '#2a2a30'); return; }
+    ell(hx + 12.5, hy + 1.5, 2, 1.6, sp === 'bunny' ? '#ff8fab' : '#1c1c22');
+    c.strokeStyle = '#1c1c22'; c.lineWidth = 1; c.beginPath(); c.arc(hx + 9.5, hy + 4, 2.4, 0.2, Math.PI - 0.4); c.stroke();
+    if (sp === 'cat' || sp === 'tiger'){ c.strokeStyle = 'rgba(30,30,30,.6)'; c.lineWidth = 0.7; for (const dy of [-1, 1.5]){ c.beginPath(); c.moveTo(hx + 13, hy + 2 + dy * 0.5); c.lineTo(hx + 19, hy + 1 + dy); c.stroke(); } }
+  }
+
+  function drawClassic(c, o){
     const s = o.grounded ? Math.sin(o.anim) * 5 : 0;
     const tuck = o.grounded ? 0 : 4;
     c.fillStyle = C.pants;
@@ -369,29 +697,57 @@ button,.btn{font:inherit;cursor:pointer}
     c.fillStyle = C.hoodie;
     c.save(); c.translate(2, -33); c.rotate(o.grounded ? -s * 0.08 : -2.2);
     rr(c, -3, 0, 7, 15, 3); c.fill(); c.restore();
-    if (!(charImg && charMode === 'face')){
-      c.fillStyle = C.skin;
-      c.beginPath(); c.arc(0, -48, 12, 0, TAU); c.fill();
-      c.fillStyle = C.ice;
-      c.beginPath(); c.arc(0, -50, 12.5, Math.PI, 0); c.fill();
-      c.fillRect(-13, -51, 26, 4);
-      c.beginPath(); c.arc(0, -63, 4, 0, TAU); c.fill();
-      c.fillStyle = C.night;
-      c.fillRect(3, -46, 3, 4); c.fillRect(8, -46, 3, 4);
-    }
-    c.restore();
-    if (charImg && charMode === 'face'){
-      // photo face stays unmirrored so it reads correctly
-      const d = 20 * o.sy, r = 16;
-      const hx = x + d * Math.sin(rot), hy = y - 30 - d * Math.cos(rot);
-      const k = Math.max((r * 2) / charImg.width, (r * 2) / charImg.height);
-      const w = charImg.width * k, h = charImg.height * k;
-      c.save();
-      c.beginPath(); c.arc(hx, hy, r, 0, TAU); c.clip();
-      c.drawImage(charImg, hx - w / 2, hy - h / 2, w, h);
+  }
+  function drawClassicHead(c){
+    c.fillStyle = C.skin;
+    c.beginPath(); c.arc(0, -48, 12, 0, TAU); c.fill();
+    c.fillStyle = C.ice;
+    c.beginPath(); c.arc(0, -50, 12.5, Math.PI, 0); c.fill();
+    c.fillRect(-13, -51, 26, 4);
+    c.beginPath(); c.arc(0, -63, 4, 0, TAU); c.fill();
+    c.fillStyle = C.night;
+    c.fillRect(3, -46, 3, 4); c.fillRect(8, -46, 3, 4);
+  }
+
+  // Draws a character with feet at (x, y).
+  function drawCharacter(c, x, y, o, ch){
+    const rot = o.rot || 0;
+    const enter = () => { c.save(); c.translate(x, y - 30); c.rotate(rot); c.translate(0, 30); c.scale(o.dir * o.sx, o.sy); };
+    let photo = null, pr = 15;
+    if (ch.kind === 'photo'){
+      if (charImg && charMode === 'full'){
+        const box = 62, k = Math.min(box / charImg.width, box / charImg.height);
+        const w = charImg.width * k, h = charImg.height * k;
+        enter(); c.drawImage(charImg, -w / 2, -h, w, h); c.restore();
+        return;
+      }
+      enter(); drawClassic(c, o); c.restore();
+      photo = charImg;
+    } else if (ch.kind === 'classic'){
+      enter(); drawClassic(c, o); drawClassicHead(c); c.restore();
+      return;
+    } else if (ch.kind === 'animal'){
+      enter(); drawAnimal(c, o, ch); c.restore();
+      return;
+    } else {
+      enter(); drawHumanBody(c, o, ch);
+      const img = ch.face && faceImg[ch.face];
+      if (img && img.complete && img.naturalWidth) { photo = img; pr = ch.build === 'big' ? 17 : 16; }
+      else drawHumanHead(c, ch);
       c.restore();
-      c.strokeStyle = C.ice; c.lineWidth = 2.5;
-      c.beginPath(); c.arc(hx, hy, r, 0, TAU); c.stroke();
+    }
+    if (photo){
+      // photo faces stay unmirrored so they read correctly
+      const d = 20 * o.sy;
+      const hx = x + d * Math.sin(rot), hy = y - 30 - d * Math.cos(rot);
+      const k = Math.max((pr * 2) / photo.width, (pr * 2) / photo.height);
+      const w = photo.width * k, h = photo.height * k;
+      c.save();
+      c.beginPath(); c.arc(hx, hy, pr, 0, TAU); c.clip();
+      c.drawImage(photo, hx - w / 2, hy - h / 2, w, h);
+      c.restore();
+      c.strokeStyle = ch.kind === 'photo' ? C.ice : 'rgba(255,255,255,.85)'; c.lineWidth = 2.2;
+      c.beginPath(); c.arc(hx, hy, pr, 0, TAU); c.stroke();
     }
   }
 
@@ -1123,7 +1479,7 @@ button,.btn{font:inherit;cursor:pointer}
       p: { x: W / 2, y: 0, vy: 0, dir: 1, speed: 2.6, grounded: true, coyote: 0, buffer: 0, squash: 0, anim: 0, plat: null,
            landT: 99, flip: null, flipDur: 1, rocket: 0 },
       lastFloor: 0, maxFloor: 0, bonus: 0, combo: { count: 0, floors: 0, timer: 0 },
-      popups: [], banner: null, parts: [], streak: 0
+      popups: [], banner: null, parts: [], streak: 0, unl: unlockedCount(totalFloors), newChars: []
     };
     genTo(S.camY - 200);
     S.p.plat = S.plats[0];
@@ -1172,6 +1528,9 @@ button,.btn{font:inherit;cursor:pointer}
       const k = S.maxFloor;
       if (k % 100 === 0){ banner(themeAt(k).name); sfx.combo(); }
       else if (k % 50 === 0 && !S.p.rocket) banner('FLOOR ' + k);
+      // a new character unlocks every 250 floors climbed across all runs
+      const u = unlockedCount(totalFloors + k);
+      if (u > S.unl){ S.unl = u; const nc = unlockable(u); S.newChars.push(nc.name); banner('NEW CHARACTER!'); popup(nc.name, C.gold); sfx.combo(); }
     }
   }
   function land(n){
@@ -1321,6 +1680,10 @@ button,.btn{font:inherit;cursor:pointer}
     sfx.die();
     const sc = score();
     const isBest = sc > best;
+    totalFloors += S.maxFloor;
+    store.set('odt.total', String(totalFloors));
+    $('unl').hidden = !S.newChars.length;
+    $('unl').textContent = 'Unlocked: ' + S.newChars.join(', ');
     if (isBest){ best = sc; store.set('odt.best', String(best)); }
     $('sFloor').textContent = S.maxFloor;
     $('sScore').textContent = sc;
@@ -1546,10 +1909,10 @@ button,.btn{font:inherit;cursor:pointer}
     }
     const stretch = p.grounded ? 0 : Math.min(0.15, Math.abs(p.vy) * 0.012);
     const sq = p.squash;
-    drawClimber(ctx, p.x, p.y - S.camY, {
+    drawCharacter(ctx, p.x, p.y - S.camY, {
       dir: p.dir, anim: p.anim, grounded: p.grounded, rot,
       sx: 1 + sq * 0.18 - stretch, sy: 1 - sq * 0.18 + stretch
-    });
+    }, current);
 
     drawWalls(A, 1);
     drawWalls(B, t);
