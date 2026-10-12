@@ -26,7 +26,7 @@ body{background:var(--night);color:var(--text);font-family:var(--body);font-size
 #wrap{position:relative;height:100%;max-width:520px;margin:0 auto}
 #cv{display:block;width:100%;height:100%;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;cursor:pointer}
 .panel{position:absolute;inset:0;display:flex;align-items:flex-start;justify-content:center;padding:16px;background:var(--veil);overflow-y:auto}
-.panel[hidden]{display:none}
+[hidden]{display:none!important}
 .card{width:100%;max-width:380px;margin:auto 0;background:var(--card);border:2px solid var(--ice-deep);border-radius:20px;padding:22px 20px;display:flex;flex-direction:column;gap:14px;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.45)}
 h1,h2{font-family:var(--display);font-weight:400;margin:0;line-height:.95;color:var(--ice);text-shadow:0 4px 0 var(--ice-deep);text-wrap:balance}
 h1{font-size:2.6rem}
@@ -305,7 +305,10 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
     cv.height = Math.max(1, Math.round(r.height * dpr));
     scale = cv.width / W;
     H = cv.height / scale;
+    // the menu's still frame was built for the old size, so rebuild it (wired up once the game has loaded)
+    if (onResize) onResize();
   }
+  let onResize = null;
   addEventListener('resize', resize);
   resize();
 
@@ -923,6 +926,7 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
   // Where a character's head sits, in its own facing-right coordinates.
   function headOf(ch){
     if (ch.kind === 'animal') return { x: 1, y: -43, r: 14, top: -56, ey: -45 };
+    if (ch.kind === 'photo') return { x: 0, y: -50, r: 15, top: -66, ey: -52 };
     if (ch.kind === 'classic') return { x: 0, y: -48, r: 12.5, top: -63, ey: -44 };
     const hs = ch.hair && ch.hair.style;
     if (hs === 'helmet') return { x: 0, y: -50, r: 16.5, top: -66, ey: -49 };
@@ -1052,6 +1056,7 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
       c.restore();
       c.strokeStyle = ch.kind === 'photo' ? C.ice : 'rgba(255,255,255,.85)'; c.lineWidth = 2.2;
       c.beginPath(); c.arc(hx, hy, pr, 0, TAU); c.stroke();
+      enter(); drawHat(c, hid, headOf(ch)); c.restore();
     }
   }
 
@@ -2044,7 +2049,10 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
   const slug = n => (String(n).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'player').slice(0, 40);
   let localBoard = (() => { try { const o = JSON.parse(store.get('odt.board') || '{}'); return o && typeof o === 'object' ? o : {}; } catch(e){ return {}; } })();
   let sharedBoard = null, db = null, dbWritable = true, synced = false, onWeb = false;
-  $('playerName').value = store.get('odt.player') || 'OneDay';
+  // a fresh device gets its own name, so strangers on the public site never share one scoreboard row
+  const guestName = () => 'Player' + (1000 + Math.floor(Math.random() * 9000));
+  if (!store.get('odt.player')) store.set('odt.player', guestName());
+  $('playerName').value = store.get('odt.player');
   const playerName = () => (($('playerName').value || '').trim() || 'Player').slice(0, 16);
   const clean = r => ({ name: String(r.name || 'Player').slice(0, 16), score: Math.max(0, Math.floor(+r.score || 0)), floor: Math.max(0, Math.floor(+r.floor || 0)), diff: DIFF[r.diff] ? r.diff : 'normal' });
   function boardRows(){
@@ -2134,6 +2142,7 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
     else $('myBest').textContent = 'Your best: ' + mb.score + '. You need ' + (top.score - mb.score + 1) + ' more to take #1 from ' + top.name + '.';
   }
   $('playerName').addEventListener('input', () => { store.set('odt.player', $('playerName').value.trim().slice(0, 16)); renderBoard(); });
+  $('playerName').addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); $('playerName').blur(); start(); } });
   function paintDiff(){ document.querySelectorAll('.diff button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.diff === difficulty))); }
   document.querySelectorAll('.diff button').forEach(b => b.addEventListener('click', () => { difficulty = b.dataset.diff; store.set('odt.diff', difficulty); paintDiff(); }));
   paintDiff();
@@ -2531,7 +2540,7 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
 
   function start(){
     initAudio();
-    if (!$('playerName').value.trim()) $('playerName').value = 'Player';
+    if (!$('playerName').value.trim()) $('playerName').value = guestName();
     store.set('odt.player', playerName());
     newGame();
     mode = 'play';
@@ -2984,6 +2993,7 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
   newGame();
   paintCharUI();
   renderBoard();
+  onResize = () => { if (mode === 'menu'){ newGame(); stillDrawn = 0; } };
   requestAnimationFrame(frame);
 })();
 </script>
