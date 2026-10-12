@@ -29,6 +29,23 @@ app.get('/book', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'book.html'));
 });
 
+// ── OneDay Tower ──
+// The game lives in oneday-tower.html (the same file is published as a Claude artifact).
+// Here it gets a full page around it, plus Firebase for the shared scoreboard. See TOWER_SETUP.md.
+const towerGame = require('fs').readFileSync(path.join(__dirname, 'oneday-tower.html'), 'utf8');
+const towerPage = `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="/tower-firebase.js"></script>
+</head><body>
+${towerGame}
+</body></html>`;
+app.get('/tower', (req, res) => {
+  res.type('html').send(towerPage);
+});
+
 // ── Plaid Setup ──
 const config = new Configuration({
   basePath: PlaidEnvironments.sandbox, // Change to 'production' when ready to go live

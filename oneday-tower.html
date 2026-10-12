@@ -194,6 +194,7 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
       <div class="sheet-body">
         <ul class="how">
           <li><b>Tap left or right</b>jump that way</li>
+          <li><b>On a computer</b>arrows steer, space jumps, Enter starts</li>
           <li><b>Run first</b>speed makes bigger jumps</li>
           <li><b>Tap as you land</b>for a perfect flip</li>
           <li><b>Skip floors</b>back to back for combos</li>
@@ -2042,7 +2043,7 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
   // Shared through the game's database when it is available, with this phone's own copy as a backup.
   const slug = n => (String(n).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'player').slice(0, 40);
   let localBoard = (() => { try { const o = JSON.parse(store.get('odt.board') || '{}'); return o && typeof o === 'object' ? o : {}; } catch(e){ return {}; } })();
-  let sharedBoard = null, db = null, dbWritable = true, synced = false;
+  let sharedBoard = null, db = null, dbWritable = true, synced = false, onWeb = false;
   $('playerName').value = store.get('odt.player') || 'OneDay';
   const playerName = () => (($('playerName').value || '').trim() || 'Player').slice(0, 16);
   const clean = r => ({ name: String(r.name || 'Player').slice(0, 16), score: Math.max(0, Math.floor(+r.score || 0)), floor: Math.max(0, Math.floor(+r.floor || 0)), diff: DIFF[r.diff] ? r.diff : 'normal' });
@@ -2065,7 +2066,7 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
     renderBoard();
     if (!db || !dbWritable) return;
     try { await db.collection('scores').doc(k).set(row); }
-    catch(e){ if (e && (e.code === 'invalid_argument' || e.code === 'not_granted' || e.code === 'revoked')) { dbWritable = false; renderBoard(); } }
+    catch(e){ if (!onWeb && e && (e.code === 'invalid_argument' || e.code === 'not_granted' || e.code === 'revoked')) { dbWritable = false; renderBoard(); } }
   }
   // Scores set on this phone before the shared board answered get uploaded once.
   async function syncLocal(){
@@ -2075,7 +2076,7 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
       const r = clean(localBoard[k]);
       if (r.score > (shared[k] || 0) && db && dbWritable){
         try { await db.collection('scores').doc(k).set(Object.assign({ at: Date.now() }, r)); }
-        catch(e){ dbWritable = false; break; }
+        catch(e){ if (!onWeb){ dbWritable = false; break; } }
       }
     }
   }
@@ -2088,6 +2089,11 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
   ];
   (async () => {
     try { db = window.claude && window.claude.use ? await window.claude.use('db') : null; } catch(e){ db = null; }
+    // on the public website the shared board lives in Firebase instead
+    if (!db && window.TOWER_FIREBASE && window.firebase){
+      try { db = firebase.firestore(firebase.apps.length ? firebase.app() : firebase.initializeApp(window.TOWER_FIREBASE)); onWeb = true; }
+      catch(e){ db = null; }
+    }
     if (!db){ renderBoard(); return; }
     db.collection('scores').orderBy('score', 'desc').limit(25).onSnapshot(snap => {
       sharedBoard = snap.docs.map(d => d.data()).filter(Boolean).map(clean);
@@ -2121,7 +2127,7 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
       $('champScore').textContent = '';
     }
     fillList($('boardList'), rows, 0, 20);
-    $('boardNote').textContent = db ? (dbWritable ? 'Everyone who opens this game shares this scoreboard.' : 'Only the game owner and editors can post to the shared board. Your scores are kept on this phone.') : 'Scores are kept on this phone.';
+    $('boardNote').textContent = onWeb ? 'Live scoreboard: everyone who plays this game online shares it.' : db ? (dbWritable ? 'Everyone who opens this game shares this scoreboard.' : 'Only the game owner and editors can post to the shared board. Your scores are kept on this phone.') : 'Scores are kept on this phone.';
     const mb = myBest();
     if (!mb.score) $('myBest').textContent = 'No score yet for ' + playerName() + '. Get on the board!';
     else if (isMe(top)) $('myBest').textContent = 'You hold the crown with ' + mb.score + '. Defend it!';
@@ -2208,11 +2214,32 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
     const r = cv.getBoundingClientRect();
     press(e.clientX - r.left < r.width / 2 ? -1 : 1);
   });
-  addEventListener('keydown', e => {
+  // Keyboard: arrows (or A and D) steer, space (or up, or W) jumps. Space or Enter also starts a run.
+  function steer(side){
     if (mode !== 'play') return;
-    if (e.key === 'ArrowLeft' || e.key === 'a'){ press(-1); e.preventDefault(); }
-    else if (e.key === 'ArrowRight' || e.key === 'd'){ press(1); e.preventDefault(); }
-    else if (e.key === ' ' || e.key === 'ArrowUp' || e.key === 'w'){ press(0); e.preventDefault(); }
+    const p = S.p;
+    if (side !== p.dir){
+      p.dir = side;
+      if (p.grounded && p.plat.hz !== 'slip') p.speed = Math.max(2.6, p.speed * 0.55);
+    }
+    S.started = true;
+  }
+  addEventListener('keydown', e => {
+    const k = e.key, typing = e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA');
+    if (k === 'Escape'){ document.querySelectorAll('.sheet').forEach(sh => sh.hidden = true); return; }
+    if (mode === 'play'){
+      if (k === 'ArrowLeft' || k === 'a' || k === 'A'){ steer(-1); e.preventDefault(); }
+      else if (k === 'ArrowRight' || k === 'd' || k === 'D'){ steer(1); e.preventDefault(); }
+      else if (k === ' ' || k === 'ArrowUp' || k === 'w' || k === 'W'){ e.preventDefault(); if (!e.repeat){ initAudio(); press(0); } }
+      return;
+    }
+    if (typing || e.repeat) return;
+    const sheetOpen = [...document.querySelectorAll('.sheet')].some(sh => !sh.hidden);
+    if ((k === ' ' || k === 'Enter') && !sheetOpen && (mode === 'menu' || mode === 'over')){
+      e.preventDefault();
+      if (document.activeElement) document.activeElement.blur();
+      start();
+    }
   });
 
   function popup(text, color){ S.popups.push({ text, color, x: S.p.x, y: S.p.y - 70, life: 70 }); }
@@ -2919,8 +2946,13 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
 
     if (mode === 'play' && !S.started){
       ctx.globalAlpha = 0.6 + Math.sin(performance.now() / 250) * 0.4;
-      hudText('◀ TAP', W * 0.25, H - 60, 20, 'center', C.ice);
-      hudText('TAP ▶', W * 0.75, H - 60, 20, 'center', C.ice);
+      if (finePointer){
+        hudText('← → STEER', W * 0.5, H - 78, 18, 'center', C.ice);
+        hudText('SPACE JUMPS', W * 0.5, H - 52, 18, 'center', C.ice);
+      } else {
+        hudText('◀ TAP', W * 0.25, H - 60, 20, 'center', C.ice);
+        hudText('TAP ▶', W * 0.75, H - 60, 20, 'center', C.ice);
+      }
       ctx.globalAlpha = 1;
     }
     if (S.flash > 0){ ctx.fillStyle = 'rgba(255,248,220,' + S.flash * 0.5 + ')'; ctx.fillRect(-10, -10, W + 20, H + 20); }
@@ -2928,6 +2960,7 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
 
   // ---------- loop ----------
   let last = 0, acc = 0, stillDrawn = 0;
+  const finePointer = (() => { try { return matchMedia('(hover: hover) and (pointer: fine)').matches; } catch(e){ return false; } })();
   const DT = 1000 / 60;
   function frame(ts){
     requestAnimationFrame(frame);
