@@ -96,6 +96,23 @@ button,.btn{font:inherit;cursor:pointer}
 .rankmsg{margin:0;font-size:.95rem;color:var(--gold);font-weight:800;line-height:1.35}
 .coinline{margin:0;color:var(--gold);font-weight:800;display:flex;align-items:center;justify-content:center;gap:6px}
 .ch .price{color:var(--gold)}
+.still{overflow:hidden;touch-action:manipulation;overscroll-behavior:none;align-items:center}
+.menu-card{gap:12px;padding:18px 18px}
+.menu-card h1{font-size:2rem}
+.menu-card .champ{padding:10px 12px}
+.menu-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.tile{display:flex;flex-direction:column;align-items:center;gap:2px;padding:9px 4px;border-radius:12px;border:2px solid var(--ice-deep);background:rgba(200,243,255,.06);color:var(--muted);font-size:.72rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;min-width:0;touch-action:manipulation}
+.tile b{color:var(--text);font-size:.85rem;letter-spacing:0;text-transform:none;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-flex;align-items:center;gap:4px}
+.link.center{align-self:center;text-align:center}
+.sheet{align-items:center;overflow:hidden;overscroll-behavior:none;background:rgba(11,16,48,.8)}
+.sheet-card{max-height:calc(100% - 8px);gap:10px;text-align:left;margin:0}
+.sheet-head{display:flex;align-items:center;gap:10px}
+.sheet-head .sec{flex:1}
+.done{font:inherit;font-weight:800;font-size:.9rem;padding:8px 14px;border-radius:10px;border:0;background:var(--hoodie);color:#2a1300}
+.sheet-body{overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;min-height:0;display:flex;flex-direction:column;gap:10px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(74px,1fr));gap:8px}
+.grid .ch{width:auto}
+button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 .row{display:flex;gap:10px}
 .row>*{flex:1}
 #mute{position:absolute;top:10px;left:50%;transform:translateX(-50%);width:40px;height:40px;border-radius:50%;border:2px solid rgba(200,243,255,.35);background:rgba(11,16,48,.6);color:var(--ice);font-size:1.05rem;line-height:1}
@@ -107,21 +124,16 @@ button,.btn{font:inherit;cursor:pointer}
   <canvas id="cv" aria-label="Game area. Tap the left side to jump left, the right side to jump right."></canvas>
   <button id="mute" aria-label="Turn sound off">♪</button>
 
-  <div id="menu" class="panel">
-    <div class="card">
-      <h1>OneDay<br>Tower</h1>
-      <section class="board" aria-labelledby="boardTitle">
-        <h3 id="boardTitle" class="sec">Scoreboard</h3>
-        <div id="champ" class="champ">
-          <span class="crown" aria-hidden="true">♛</span>
-          <div class="champ-text"><b id="champName">No champion yet</b><span id="champPraise">Play a round to claim the crown.</span></div>
-          <b id="champScore" class="champ-score"></b>
-        </div>
-        <ol id="boardList" class="board-list"></ol>
-        <p id="boardNote" class="note"></p>
-      </section>
+  <div id="menu" class="panel still">
+    <div class="card menu-card">
+      <h1>OneDay Tower</h1>
+      <div id="champ" class="champ">
+        <span class="crown" aria-hidden="true">♛</span>
+        <div class="champ-text"><b id="champName">No champion yet</b><span id="champPraise">Play a round to claim the crown.</span></div>
+        <b id="champScore" class="champ-score"></b>
+      </div>
       <div class="field">
-        <label for="playerName">Your name on the scoreboard</label>
+        <label for="playerName">Your name</label>
         <input id="playerName" type="text" maxlength="16" autocomplete="nickname" spellcheck="false">
       </div>
       <p id="myBest" class="mybest"></p>
@@ -131,9 +143,21 @@ button,.btn{font:inherit;cursor:pointer}
         <button type="button" data-diff="hard" aria-pressed="false">Hard</button>
       </div>
       <button id="play" type="button" class="primary">Play</button>
-      <div class="pick">
-        <div class="pick-head"><b id="charName">OneDay</b><span id="unlockNote"></span></div>
-        <div id="roster" class="roster" role="listbox" aria-label="Characters"></div>
+      <div class="menu-row">
+        <button type="button" class="tile" data-open="sheetChars"><span>Character</span><b id="charName">OneDay</b></button>
+        <button type="button" class="tile" data-open="sheetHats"><span>Hats</span><b><i class="coin" aria-hidden="true"></i> <span id="walletBtn">0</span></b></button>
+        <button type="button" class="tile" data-open="sheetBoard"><span>Scores</span><b>Top 20</b></button>
+      </div>
+      <button type="button" class="link center" data-open="sheetHow">How to play</button>
+    </div>
+  </div>
+
+  <div id="sheetChars" class="panel sheet" hidden>
+    <div class="card sheet-card">
+      <div class="sheet-head"><h3 class="sec">Characters</h3><button type="button" class="done" data-close>Done</button></div>
+      <p id="unlockNote" class="note"></p>
+      <div class="sheet-body">
+        <div id="roster" class="grid" role="listbox" aria-label="Characters"></div>
         <div class="char-actions">
           <label class="ghost btn" for="file">Upload your own photo</label>
           <input id="file" class="vh" type="file" accept="image/*">
@@ -142,15 +166,32 @@ button,.btn{font:inherit;cursor:pointer}
             <button type="button" data-mode="full" aria-pressed="false">Whole thing</button>
           </div>
           <button id="reset" type="button" class="link" hidden>Remove my photo</button>
+          <p id="err" class="err" hidden></p>
         </div>
       </div>
-      <p id="err" class="err" hidden></p>
-      <section class="shop" aria-labelledby="shopTitle">
-        <div class="pick-head"><h3 id="shopTitle" class="sec">Hat shop</h3><span class="wallet"><i class="coin" aria-hidden="true"></i><b id="wallet">0</b> coins</span></div>
-        <div id="hats" class="roster" role="listbox" aria-label="Hats"></div>
-      </section>
-      <details class="howto">
-        <summary>How to play</summary>
+    </div>
+  </div>
+
+  <div id="sheetHats" class="panel sheet" hidden>
+    <div class="card sheet-card">
+      <div class="sheet-head"><h3 class="sec">Hat shop</h3><span class="wallet"><i class="coin" aria-hidden="true"></i><b id="wallet">0</b></span><button type="button" class="done" data-close>Done</button></div>
+      <p id="shopErr" class="err" hidden></p>
+      <div class="sheet-body"><div id="hats" class="grid" role="listbox" aria-label="Hats"></div></div>
+    </div>
+  </div>
+
+  <div id="sheetBoard" class="panel sheet" hidden>
+    <div class="card sheet-card">
+      <div class="sheet-head"><h3 class="sec">Scoreboard</h3><button type="button" class="done" data-close>Done</button></div>
+      <div class="sheet-body"><ol id="boardList" class="board-list"></ol></div>
+      <p id="boardNote" class="note"></p>
+    </div>
+  </div>
+
+  <div id="sheetHow" class="panel sheet" hidden>
+    <div class="card sheet-card">
+      <div class="sheet-head"><h3 class="sec">How to play</h3><button type="button" class="done" data-close>Done</button></div>
+      <div class="sheet-body">
         <ul class="how">
           <li><b>Tap left or right</b>jump that way</li>
           <li><b>Run first</b>speed makes bigger jumps</li>
@@ -165,7 +206,7 @@ button,.btn{font:inherit;cursor:pointer}
           <li><b>Every 100 floors</b>a new world with its own tricky floors</li>
           <li><b>Every 250 floors</b>unlock a new character</li>
         </ul>
-      </details>
+      </div>
     </div>
   </div>
 
@@ -538,6 +579,7 @@ button,.btn{font:inherit;cursor:pointer}
       box.append(b);
     }
     $('charName').textContent = current.name;
+    stillDrawn = 0;
     const next = (unlockedCount(totalFloors) + 1) * UNLOCK_EVERY;
     $('unlockNote').textContent = totalFloors + ' floors climbed · next unlock at ' + next;
     const isPhoto = current.id === 'photo';
@@ -545,7 +587,6 @@ button,.btn{font:inherit;cursor:pointer}
     $('reset').hidden = !charImg;
     document.querySelectorAll('#modes button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === charMode)));
     const sel = box.querySelector('[aria-selected="true"]');
-    if (sel) box.scrollLeft = Math.max(0, sel.offsetLeft - box.offsetLeft - 8);
     paintShop();
   }
 
@@ -922,6 +963,7 @@ button,.btn{font:inherit;cursor:pointer}
     const box = $('hats');
     box.textContent = '';
     $('wallet').textContent = wallet;
+    $('walletBtn').textContent = wallet;
     for (const hat of HATS){
       const owned = ownedHats.includes(hat.id), on = hat.id === hatId;
       const b = document.createElement('button');
@@ -937,12 +979,12 @@ button,.btn{font:inherit;cursor:pointer}
       b.setAttribute('aria-label', hat.name + (owned ? (on ? ', wearing' : ', owned') : ', costs ' + hat.price + ' coins'));
       b.addEventListener('click', () => {
         if (!owned){
-          if (wallet < hat.price){ $('err').textContent = 'You need ' + (hat.price - wallet) + ' more coins for the ' + hat.name + '. Grab coins while you climb.'; $('err').hidden = false; return; }
+          if (wallet < hat.price){ $('shopErr').textContent = 'You need ' + (hat.price - wallet) + ' more coins for the ' + hat.name + '. Grab coins while you climb.'; $('shopErr').hidden = false; return; }
           wallet -= hat.price; store.set('odt.coins', String(wallet));
           ownedHats.push(hat.id); store.set('odt.hats', JSON.stringify(ownedHats));
           sfx.coin();
         }
-        $('err').hidden = true;
+        $('shopErr').hidden = true;
         hatId = hat.id; store.set('odt.hat', hatId);
         paintCharUI();
       });
@@ -1784,7 +1826,7 @@ button,.btn{font:inherit;cursor:pointer}
       $('champPraise').textContent = 'Play a round to claim the crown.';
       $('champScore').textContent = '';
     }
-    fillList($('boardList'), rows, 1, 7);
+    fillList($('boardList'), rows, 0, 20);
     $('boardNote').textContent = db ? (dbWritable ? 'Everyone who opens this game shares this scoreboard.' : 'Only the game owner and editors can post to the shared board. Your scores are kept on this phone.') : 'Scores are kept on this phone.';
     const mb = myBest();
     if (!mb.score) $('myBest').textContent = 'No score yet for ' + playerName() + '. Get on the board!';
@@ -2589,7 +2631,7 @@ button,.btn{font:inherit;cursor:pointer}
   }
 
   // ---------- loop ----------
-  let last = 0, acc = 0;
+  let last = 0, acc = 0, stillDrawn = 0;
   const DT = 1000 / 60;
   function frame(ts){
     requestAnimationFrame(frame);
@@ -2600,10 +2642,16 @@ button,.btn{font:inherit;cursor:pointer}
       acc += dt;
       while (acc >= DT){ step(); acc -= DT; if (mode !== 'play') break; }
     } else acc = 0;
+    if (mode === 'menu' && stillDrawn === scale) return;
     draw();
+    stillDrawn = mode === 'menu' ? scale : 0;
   }
   document.addEventListener('visibilitychange', () => { last = 0; });
 
+  // pop up pages over the still main menu
+  document.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => { $(b.dataset.open).hidden = false; }));
+  document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => { b.closest('.sheet').hidden = true; }));
+  document.querySelectorAll('.sheet').forEach(sh => sh.addEventListener('click', e => { if (e.target === sh) sh.hidden = true; }));
   newGame();
   paintCharUI();
   renderBoard();
