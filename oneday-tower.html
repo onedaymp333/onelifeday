@@ -2149,10 +2149,12 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
     // tricky floors start a few floors into each world and show up more on harder settings
     if (n >= 15 && n % 100 >= 6 && Math.random() < Math.min(0.8, D.hazard + 0.1 * lap)){
       const hz = themeAt(n).hz;
+      // floors that break or flicker away only start showing up after floor 1000
+      const vanishes = hz === 'crack' || hz === 'crumble' || hz === 'blink';
       if (hz === 'move'){
         const amp = Math.min(70, (inner - w) / 2 - 4);
         if (amp > 14){ pl.hz = hz; pl.amp = amp; pl.x0 = WALL + (inner - w) / 2; pl.ph = Math.random() * TAU; pl.spd = 0.012 + Math.random() * 0.012; pl.vx = 0; pl.x = pl.x0 + Math.sin(pl.ph) * amp; }
-      } else {
+      } else if (!vanishes || n >= 1000){
         pl.hz = hz; pl.ph = Math.random() * TAU; pl.on = true; pl.t = -1; pl.sq = 0;
       }
     }
