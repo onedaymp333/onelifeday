@@ -249,9 +249,10 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
   const FONT = '"Bungee","Arial Black",Impact,sans-serif';
   const TAU = Math.PI * 2;
 
-  // A tour of Hudson County, one stop every 100 floors. After stop 30 it laps, and every lap is harder.
+  // A tour of Hudson County, one stop every 100 floors, starting on Bergenline Avenue. After stop 30 it laps, and every lap is harder.
   // sky: sun | sunset | moon. side: what lines the edges. ground: what the landmark stands on.
   const THEMES = [
+    { key:'bergenline', name:'BERGENLINE AVENUE',     top:'#1a0a30', bot:'#5a1a4a', decor:'sparkles',  floor:'neon',      wall:'brick',      hz:'blink',   sky:'moon',   side:'rowhouse',   ground:'street', lights:true },
     { key:'statue',     name:'STATUE OF LIBERTY',     top:'#ffb88a', bot:'#7ec8f0', decor:'clouds',    floor:'copper',    wall:'copper',     hz:'move',    sky:'sun',    side:'water',      ground:'water', nyc:true },
     { key:'ellis',      name:'ELLIS ISLAND',          top:'#8fd0ff', bot:'#e6f4ff', decor:'clouds',    floor:'brick',     wall:'brick',      hz:'move',    sky:'sun',    side:'water',      ground:'water', nyc:true },
     { key:'lsc',        name:'LIBERTY SCIENCE CENTER',top:'#0b1030', bot:'#2b3f7a', decor:'galaxy',    floor:'space',     wall:'glass',      hz:'blink',   sky:'moon',   side:'park',       ground:'grass' },
@@ -273,7 +274,6 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
     { key:'helix',      name:'LINCOLN TUNNEL HELIX',  top:'#141a3a', bot:'#4a3a6a', decor:'rain',      floor:'concrete',  wall:'steelw',     hz:'slip',    sky:'moon',   side:'industrial', ground:'cliff', lights:true },
     { key:'blvdeast',   name:'BOULEVARD EAST',        top:'#ff9a7a', bot:'#ffcf9a', decor:'dust',      floor:'concrete',  wall:'brownstone', hz:'crumble', sky:'sunset', side:'rowhouse',   ground:'cliff', nyc:true },
     { key:'celia',      name:'CELIA CRUZ PARK',       top:'#ffb04a', bot:'#ffe08a', decor:'sprinkles', floor:'brick',     wall:'brick',      hz:'bounce',  sky:'sun',    side:'rowhouse',   ground:'street' },
-    { key:'bergenline', name:'BERGENLINE AVENUE',     top:'#1a0a30', bot:'#5a1a4a', decor:'sparkles',  floor:'neon',      wall:'brick',      hz:'blink',   sky:'moon',   side:'rowhouse',   ground:'street', lights:true },
     { key:'imperial',   name:'PORT IMPERIAL',         top:'#5aa0e0', bot:'#d0ecff', decor:'clouds',    floor:'boardwalk', wall:'glass',      hz:'move',    sky:'sun',    side:'water',      ground:'water', nyc:true },
     { key:'galaxy',     name:'GALAXY TOWERS',         top:'#0a0a2a', bot:'#3a2a6a', decor:'galaxy',    floor:'space',     wall:'chrome',     hz:'blink',   sky:'moon',   side:'glass',      ground:'cliff', lights:true, nyc:true },
     { key:'braddock',   name:'BRADDOCK PARK',         top:'#f0a050', bot:'#ffe0a0', decor:'leaves',    floor:'forest',    wall:'forest',     hz:'bounce',  sky:'sunset', side:'park',       ground:'grass', rays:'rgba(255,236,190,.14)' },
