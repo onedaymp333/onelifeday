@@ -100,7 +100,12 @@ button,.btn{font:inherit;cursor:pointer}
 .menu-card{gap:12px;padding:18px 18px}
 .menu-card h1{font-size:2rem}
 .menu-card .champ{padding:10px 12px}
-.menu-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.menu-row{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.towns{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
+.town{display:flex;flex-direction:column;gap:3px;text-align:left;padding:10px 12px;border-radius:12px;border:2px solid transparent;background:rgba(200,243,255,.08);color:var(--text);font:inherit;cursor:pointer}
+.town b{font-weight:800;font-size:.95rem}
+.town span{font-size:.75rem;color:var(--muted);line-height:1.3}
+.town[aria-pressed="true"]{border-color:var(--gold);background:rgba(255,210,122,.14)}
 .tile{display:flex;flex-direction:column;align-items:center;gap:2px;padding:9px 4px;border-radius:12px;border:2px solid var(--ice-deep);background:rgba(200,243,255,.06);color:var(--muted);font-size:.72rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;min-width:0;touch-action:manipulation}
 .tile b{color:var(--text);font-size:.85rem;letter-spacing:0;text-transform:none;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-flex;align-items:center;gap:4px}
 .link.center{align-self:center;text-align:center}
@@ -144,7 +149,8 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
       </div>
       <button id="play" type="button" class="primary">Play</button>
       <div class="menu-row">
-        <button type="button" class="tile" data-open="sheetChars"><span>Character</span><b id="charName">OneDay</b></button>
+        <button type="button" class="tile" data-open="sheetTowns"><span>Start</span><b id="townName">Random</b></button>
+        <button type="button" class="tile" data-open="sheetChars"><span>Climber</span><b id="charName">OneDay</b></button>
         <button type="button" class="tile" data-open="sheetHats"><span>Hats</span><b><i class="coin" aria-hidden="true"></i> <span id="walletBtn">0</span></b></button>
         <button type="button" class="tile" data-open="sheetBoard"><span>Scores</span><b>Top 20</b></button>
       </div>
@@ -180,6 +186,14 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
     </div>
   </div>
 
+  <div id="sheetTowns" class="panel sheet" hidden>
+    <div class="card sheet-card">
+      <div class="sheet-head"><h3 class="sec">Where to start</h3><button type="button" class="done" data-close>Done</button></div>
+      <p class="note">Your run starts in this town. After that, every other stop comes in a random order.</p>
+      <div class="sheet-body"><div id="towns" class="towns" role="group" aria-label="Starting town"></div></div>
+    </div>
+  </div>
+
   <div id="sheetBoard" class="panel sheet" hidden>
     <div class="card sheet-card">
       <div class="sheet-head"><h3 class="sec">Scoreboard</h3><button type="button" class="done" data-close>Done</button></div>
@@ -204,8 +218,9 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
           <li><b>Slow clock</b>the tower rises slower</li>
           <li><b>Magnet</b>pulls coins to you</li>
           <li><b>Coins</b>buy hats in the shop</li>
-          <li><b>Every 100 floors</b>a new Hudson County stop with its own tricky floors</li>
-          <li><b>Every 3,000 floors</b>a new lap of the county, faster and tougher</li>
+          <li><b>Every 50 floors</b>a new Hudson County stop with its own tricky floors</li>
+          <li><b>Start in</b>pick a town, then the stops come in a random order</li>
+          <li><b>Every 1,500 floors</b>a new lap of the county, faster and tougher</li>
           <li><b>Every 250 floors</b>unlock a new character</li>
         </ul>
       </div>
@@ -287,8 +302,41 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
   const RAINBOW = ['#ffb3c7','#ffd59e','#fff3a3','#bff5b0','#aee3ff','#d2b8ff'];
   const RB_BOLD = ['#ff5e7e','#ffa34d','#ffe14d','#5fdc6b','#4db8ff','#9b6bff'];
   const SPRINK = ['#ff5fa2','#ffd23f','#5fd3ff','#8cff7a','#b388ff'];
-  const themeAt = n => THEMES[Math.floor(Math.max(0, n) / 100) % THEMES.length];
-  const LAP = 100 * THEMES.length;
+  // Which town each stop is in, for picking where a run starts.
+  const TOWN_OF = {
+    lsc:'Jersey City', statue:'Jersey City', ellis:'Jersey City', exchange:'Jersey City', colgate:'Jersey City', newport:'Jersey City',
+    grove:'Jersey City', journal:'Jersey City', lincolnpk:'Jersey City', bayonne:'Bayonne', cape:'Bayonne',
+    terminal:'Hoboken', piera:'Hoboken', washington:'Hoboken', stevens:'Hoboken', elysian:'Hoboken',
+    weehawken:'Weehawken', hamilton:'Weehawken', helix:'Weehawken', imperial:'Weehawken',
+    bergenline:'Union City', celia:'Union City', blvdeast:'West New York', galaxy:'Guttenberg', braddock:'North Bergen',
+    laurel:'Secaucus', secaucus:'Secaucus', kearny:'Kearny', stadium:'Harrison', tops:'East Newark'
+  };
+  THEMES.forEach(t => { t.town = TOWN_OF[t.key]; });
+  const TOWNS = ['Jersey City', 'Bayonne', 'Hoboken', 'Weehawken', 'Union City', 'West New York', 'Guttenberg', 'North Bergen', 'Secaucus', 'Kearny', 'Harrison', 'East Newark'];
+
+  // A new stop every 50 floors. Each run starts in the chosen town, then visits every other stop in a random order.
+  const STOP = 50;
+  const shuffle = a => { for (let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  function makeRoute(town){
+    const all = THEMES.map((_, i) => i);
+    const pool = TOWNS.includes(town) ? all.filter(i => THEMES[i].town === town) : all;
+    const first = pool[Math.floor(Math.random() * pool.length)];
+    return [first, ...shuffle(all.filter(i => i !== first))];
+  }
+  // every later lap gets its own shuffle, never repeating the stop it just left
+  function extendRoute(r){
+    const next = shuffle(THEMES.map((_, i) => i));
+    if (next[0] === r[r.length - 1]) next.push(next.shift());
+    r.push(...next);
+  }
+  function stopAt(i){
+    const r = S && S.route;
+    if (!r) return THEMES[i % THEMES.length];
+    while (r.length <= i) extendRoute(r);
+    return THEMES[r[i]];
+  }
+  const themeAt = n => stopAt(Math.floor(Math.max(0, n) / STOP));
+  const LAP = STOP * THEMES.length;
   const lapOf = n => Math.floor(Math.max(0, n) / LAP);
 
   // World units: the tower is 400 wide; height follows the screen.
@@ -2162,7 +2210,7 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
     const x = WALL + Math.random() * (inner - w);
     const pl = { n, x, w, y: -n * GAP, seed: (Math.random() * 1e9) | 0 };
     // tricky floors start a few floors into each world and show up more on harder settings
-    if (n >= 15 && n % 100 >= 6 && Math.random() < Math.min(0.8, D.hazard + 0.1 * lap)){
+    if (n >= 15 && n % STOP >= 6 && Math.random() < Math.min(0.8, D.hazard + 0.1 * lap)){
       const hz = themeAt(n).hz;
       // floors that break or flicker away only start showing up after floor 1000
       const vanishes = hz === 'crack' || hz === 'crumble' || hz === 'blink';
@@ -2200,7 +2248,8 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
       lastFloor: 0, maxFloor: 0, bonus: 0, combo: { count: 0, floors: 0, timer: 0 },
       popups: [], banner: null, parts: [], streak: 0, unl: unlockedCount(totalFloors), newChars: [],
       coins: 0, slow: 0, magnet: 0, shake: 0, freeze: 0, flash: 0,
-      target: mb.score, targetFloor: mb.floor, beatBest: false, leader: leaderEntry(), beatLeader: false
+      target: mb.score, targetFloor: mb.floor, beatBest: false, leader: leaderEntry(), beatLeader: false,
+      route: makeRoute(startTown)
     };
     genTo(S.camY - 200);
     S.p.plat = S.plats[0];
@@ -2269,8 +2318,7 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
       S.maxFloor++;
       const k = S.maxFloor;
       if (k % LAP === 0){ banner('LAP ' + (k / LAP + 1) + '! FASTER'); sfx.fanfare(); }
-      else if (k % 100 === 0){ banner(themeAt(k).name); sfx.combo(); }
-      else if (k % 50 === 0 && !S.p.rocket) banner('FLOOR ' + k);
+      else if (k % STOP === 0){ banner(themeAt(k).name); sfx.combo(); }
       // a new character unlocks every 250 floors climbed across all runs
       const u = unlockedCount(totalFloors + k);
       if (u > S.unl){ S.unl = u; const nc = unlockable(u); S.newChars.push(nc.name); banner('NEW CHARACTER!'); popup(nc.name, C.gold); sfx.combo(); }
@@ -2546,6 +2594,7 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
     mode = 'play';
     $('menu').hidden = true;
     $('over').hidden = true;
+    banner(themeAt(0).name);
   }
   $('play').addEventListener('click', start);
   $('again').addEventListener('click', start);
@@ -2557,9 +2606,9 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
   // The two worlds on screen right now, and how far we are blended into the next one.
   function viewThemes(){
     const f = Math.max(0, -(S.camY + H * 0.5) / GAP);
-    const i = Math.floor(f / 100), local = f - i * 100;
-    const t = Math.min(1, Math.max(0, (local - 92) / 8));
-    return [THEMES[i % THEMES.length], THEMES[(i + 1) % THEMES.length], t];
+    const i = Math.floor(f / STOP), local = f - i * STOP;
+    const t = Math.min(1, Math.max(0, (local - (STOP - 8)) / 8));
+    return [stopAt(i), stopAt(i + 1), t];
   }
 
   function drawSky(th){
@@ -2985,6 +3034,29 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
     stillDrawn = mode === 'menu' ? scale : 0;
   }
   document.addEventListener('visibilitychange', () => { last = 0; });
+
+  // where a run starts
+  let startTown = TOWNS.includes(store.get('odt.town')) ? store.get('odt.town') : 'random';
+  function paintTowns(){
+    const box = $('towns');
+    box.textContent = '';
+    for (const town of ['random', ...TOWNS]){
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'town';
+      b.setAttribute('aria-pressed', String(town === startTown));
+      const nm = document.createElement('b'); nm.textContent = town === 'random' ? 'Surprise me' : town;
+      const sub = document.createElement('span');
+      sub.textContent = town === 'random' ? 'Any of the 30 stops' : THEMES.filter(t => t.town === town).map(t => t.name.toLowerCase().replace(/\b\w/g, ch => ch.toUpperCase())).join(', ');
+      b.append(nm, sub);
+      b.addEventListener('click', () => {
+        startTown = town; store.set('odt.town', town); paintTowns();
+        if (mode === 'menu'){ newGame(); stillDrawn = 0; }
+      });
+      box.append(b);
+    }
+    $('townName').textContent = startTown === 'random' ? 'Random' : startTown;
+  }
+  paintTowns();
 
   // pop up pages over the still main menu
   document.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => { $(b.dataset.open).hidden = false; }));
