@@ -2957,12 +2957,7 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
     ctx.fillStyle = color;
     ctx.fillText(text, x, y);
   }
-  function timerBar(label, y, left, max, col){
-    const warn = left < 120 && Math.floor(left / 8) % 2;
-    hudText(label, WALL + 10, y, 11, 'left', warn ? C.hoodie : col);
-    ctx.fillStyle = 'rgba(11,16,48,.6)'; rr(ctx, WALL + 84, y - 9, 80, 8, 4); ctx.fill();
-    ctx.fillStyle = warn ? C.hoodie : col; rr(ctx, WALL + 84, y - 9, 80 * Math.max(0, left / max), 8, 4); ctx.fill();
-  }
+
 
   function draw(){
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
@@ -3033,20 +3028,26 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
     const cw = ctx.measureText(String(S.coins)).width;
     ctx.fillStyle = '#ffc531'; ctx.beginPath(); ctx.arc(W - WALL - 18 - cw, 51.5, 5, 0, TAU); ctx.fill();
 
-    let ty = 78;
-    if (p.rocket > 0){ timerBar('ROCKET', ty, p.rocket, ROCKET_TIME, C.gold); ty += 16; }
-    if (p.dj > 0){ timerBar('DOUBLE JUMP', ty, p.dj, 900, '#8cff7a'); ty += 16; }
-    if (S.slow > 0){ timerBar('SLOW CLOCK', ty, S.slow, 480, '#b39dff'); ty += 16; }
-    if (S.magnet > 0){ timerBar('MAGNET', ty, S.magnet, 600, '#ff7a8a'); ty += 16; }
-    if (S.turbo > 0){ timerBar('PATH TURBO', ty, S.turbo, TURBO_TIME, 'hsl(' + ((S.t * 12) % 360) + ',100%,62%)'); ty += 16; }
-    if (p.shield){ hudText('SHIELD ON', WALL + 10, ty, 11, 'left', '#7ad7ff'); }
+    // active power ups as a small row of icons, with no countdown, so you never quite know when one runs out
+    const active = [];
+    if (p.rocket > 0) active.push('rocket');
+    if (S.turbo > 0) active.push('turbo');
+    if (p.dj > 0) active.push('double');
+    if (S.slow > 0) active.push('slow');
+    if (S.magnet > 0) active.push('magnet');
+    if (p.shield) active.push('shield');
+    active.forEach((type, i) => {
+      const ix = WALL + 20 + i * 28, iy = 82;
+      ctx.fillStyle = 'rgba(11,16,48,.55)'; ctx.beginPath(); ctx.arc(ix, iy, 13, 0, TAU); ctx.fill();
+      ctx.save(); ctx.translate(ix, iy); ctx.scale(0.7, 0.7); drawItemIcon(ctx, type, 0, 0); ctx.restore();
+    });
 
     if (S.combo.count){
-      hudText('COMBO x' + S.combo.count, W / 2, 86, 18, 'center', C.gold);
+      hudText('COMBO x' + S.combo.count, W / 2, 124, 18, 'center', C.gold);
       ctx.fillStyle = 'rgba(11,16,48,.6)';
-      rr(ctx, W / 2 - 60, 94, 120, 8, 4); ctx.fill();
+      rr(ctx, W / 2 - 60, 132, 120, 8, 4); ctx.fill();
       ctx.fillStyle = C.gold;
-      rr(ctx, W / 2 - 60, 94, 120 * Math.max(0, S.combo.timer / 170), 8, 4); ctx.fill();
+      rr(ctx, W / 2 - 60, 132, 120 * Math.max(0, S.combo.timer / 170), 8, 4); ctx.fill();
     }
 
     // the chase: what you need next, always on screen
