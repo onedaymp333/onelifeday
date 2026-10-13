@@ -97,10 +97,17 @@ button,.btn{font:inherit;cursor:pointer}
 .coinline{margin:0;color:var(--gold);font-weight:800;display:flex;align-items:center;justify-content:center;gap:6px}
 .ch .price{color:var(--gold)}
 .still{overflow:hidden;touch-action:manipulation;overscroll-behavior:none;align-items:center}
-.menu-card{gap:12px;padding:18px 18px}
-.menu-card h1{font-size:2rem}
+.menu-card{gap:10px;padding:16px 18px}
+.menu-card h1{font-size:1.8rem}
 .menu-card .champ{padding:10px 12px}
-.menu-row{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.menu-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.towner{display:grid;grid-template-columns:44px 1fr 44px;gap:8px;align-items:stretch}
+.arrow{font:inherit;font-size:1.1rem;border-radius:12px;border:2px solid var(--ice-deep);background:rgba(200,243,255,.08);color:var(--ice);cursor:pointer;touch-action:manipulation}
+.arrow:active{background:rgba(200,243,255,.2)}
+.town-now{display:flex;flex-direction:column;align-items:center;gap:1px;min-width:0;padding:6px 8px;border-radius:12px;border:2px solid var(--gold);background:rgba(255,210,122,.12);color:var(--text);font:inherit;cursor:pointer;touch-action:manipulation}
+.town-now span{font-size:.68rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.town-now b{font-family:var(--display);font-weight:400;font-size:1.1rem;color:var(--gold);line-height:1.15}
+.town-now small{font-size:.72rem;color:var(--muted);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .towns{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
 .town{display:flex;flex-direction:column;gap:3px;text-align:left;padding:10px 12px;border-radius:12px;border:2px solid transparent;background:rgba(200,243,255,.08);color:var(--text);font:inherit;cursor:pointer}
 .town b{font-weight:800;font-size:.95rem}
@@ -147,10 +154,16 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
         <button type="button" data-diff="normal" aria-pressed="false">Normal</button>
         <button type="button" data-diff="hard" aria-pressed="false">Hard</button>
       </div>
+      <div class="towner">
+        <button type="button" class="arrow" id="townPrev" aria-label="Previous town">◀</button>
+        <button type="button" class="town-now" data-open="sheetTowns" aria-label="Choose where to start">
+          <span>Start in</span><b id="townName">Random</b><small id="townStops">Any of the 30 stops</small>
+        </button>
+        <button type="button" class="arrow" id="townNext" aria-label="Next town">▶</button>
+      </div>
       <button id="play" type="button" class="primary">Play</button>
       <div class="menu-row">
-        <button type="button" class="tile" data-open="sheetTowns"><span>Start</span><b id="townName">Random</b></button>
-        <button type="button" class="tile" data-open="sheetChars"><span>Climber</span><b id="charName">OneDay</b></button>
+        <button type="button" class="tile" data-open="sheetChars"><span>Character</span><b id="charName">OneDay</b></button>
         <button type="button" class="tile" data-open="sheetHats"><span>Hats</span><b><i class="coin" aria-hidden="true"></i> <span id="walletBtn">0</span></b></button>
         <button type="button" class="tile" data-open="sheetBoard"><span>Scores</span><b>Top 20</b></button>
       </div>
@@ -219,7 +232,7 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
           <li><b>Magnet</b>pulls coins to you</li>
           <li><b>Coins</b>buy hats in the shop</li>
           <li><b>Every 50 floors</b>a new Hudson County stop with its own tricky floors</li>
-          <li><b>Start in</b>pick a town, then the stops come in a random order</li>
+          <li><b>Start in</b>tap the arrows to pick a town, then the stops come in a random order</li>
           <li><b>Every 1,500 floors</b>a new lap of the county, faster and tougher</li>
           <li><b>Every 250 floors</b>unlock a new character</li>
         </ul>
@@ -2293,6 +2306,7 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
     }
     if (typing || e.repeat) return;
     const sheetOpen = [...document.querySelectorAll('.sheet')].some(sh => !sh.hidden);
+    if (mode === 'menu' && !sheetOpen && (k === 'ArrowLeft' || k === 'ArrowRight')){ e.preventDefault(); stepTown(k === 'ArrowLeft' ? -1 : 1); return; }
     if ((k === ' ' || k === 'Enter') && !sheetOpen && (mode === 'menu' || mode === 'over')){
       e.preventDefault();
       if (document.activeElement) document.activeElement.blur();
@@ -3046,16 +3060,25 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
       b.setAttribute('aria-pressed', String(town === startTown));
       const nm = document.createElement('b'); nm.textContent = town === 'random' ? 'Surprise me' : town;
       const sub = document.createElement('span');
-      sub.textContent = town === 'random' ? 'Any of the 30 stops' : THEMES.filter(t => t.town === town).map(t => t.name.toLowerCase().replace(/\b\w/g, ch => ch.toUpperCase())).join(', ');
+      sub.textContent = townStopsText(town);
       b.append(nm, sub);
-      b.addEventListener('click', () => {
-        startTown = town; store.set('odt.town', town); paintTowns();
-        if (mode === 'menu'){ newGame(); stillDrawn = 0; }
-      });
+      // picking a town closes the list, so it is one tap
+      b.addEventListener('click', () => { setTown(town); $('sheetTowns').hidden = true; });
       box.append(b);
     }
     $('townName').textContent = startTown === 'random' ? 'Random' : startTown;
+    $('townStops').textContent = townStopsText(startTown);
   }
+  const titleCase = t => t.toLowerCase().replace(/\b\w/g, ch => ch.toUpperCase());
+  const townStopsText = town => town === 'random' ? 'Any of the 30 stops' : THEMES.filter(t => t.town === town).map(t => titleCase(t.name)).join(', ');
+  function setTown(town){
+    startTown = town; store.set('odt.town', town); paintTowns();
+    if (mode === 'menu'){ newGame(); stillDrawn = 0; }
+  }
+  const TOWN_CYCLE = ['random', ...TOWNS];
+  function stepTown(d){ setTown(TOWN_CYCLE[(TOWN_CYCLE.indexOf(startTown) + d + TOWN_CYCLE.length) % TOWN_CYCLE.length]); }
+  $('townPrev').addEventListener('click', () => stepTown(-1));
+  $('townNext').addEventListener('click', () => stepTown(1));
   paintTowns();
 
   // pop up pages over the still main menu
