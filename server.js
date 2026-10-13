@@ -19,6 +19,8 @@ app.use((req, res, next) => {
   if (PRIVATE_PATHS.test(req.path)) return res.status(404).send('Not found');
   next();
 });
+// The bare game file has no Firebase and no page wrapper, so send people to the real page.
+app.get('/oneday-tower.html', (req, res) => res.redirect(301, '/tower'));
 app.use(express.static(__dirname));
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -27,6 +29,23 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/api/booking', bookingRoutes);
 app.get('/book', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'book.html'));
+});
+
+// ── OneDay Tower ──
+// The game lives in oneday-tower.html (the same file is published as a Claude artifact).
+// Here it gets a full page around it, plus Firebase for the shared scoreboard. See TOWER_SETUP.md.
+const towerGame = require('fs').readFileSync(path.join(__dirname, 'oneday-tower.html'), 'utf8');
+const towerPage = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>OneDay Tower</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="/tower-firebase.js"></script>
+</head><body>
+${towerGame}
+</body></html>`;
+app.get('/tower', (req, res) => {
+  res.type('html').send(towerPage);
 });
 
 // ── Plaid Setup ──
