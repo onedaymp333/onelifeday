@@ -1121,6 +1121,35 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
     }
   }
 
+  // ---------- classic platformer look: bold outlines and the spin ball ----------
+  const SPR = 150, SPR_FOOT = 105;
+  const sprA = document.createElement('canvas'), sprB = document.createElement('canvas');
+  const heroColor = ch => ch.kind === 'animal' ? ch.body : ch.kind === 'human' ? ch.top.color : C.hoodie;
+  function drawBall(c, x, y, col, spin){
+    c.save(); c.translate(x, y - 20); c.rotate(spin);
+    c.fillStyle = col; c.beginPath(); c.arc(0, 0, 17, 0, TAU); c.fill();
+    c.strokeStyle = 'rgba(0,0,0,.3)'; c.lineWidth = 3; c.lineCap = 'round';
+    for (let k = 0; k < 3; k++){ c.beginPath(); c.arc(0, 0, 11, k * TAU / 3, k * TAU / 3 + 1.2); c.stroke(); }
+    c.rotate(-spin);
+    c.fillStyle = 'rgba(255,255,255,.5)'; c.beginPath(); c.ellipse(-6, -7, 6, 3.5, -0.6, 0, TAU); c.fill();
+    c.restore();
+  }
+  // The hero is drawn once into a sprite, then given a dark cartoon outline.
+  function heroSprite(o, ch, ball, spin){
+    const px = Math.ceil(SPR * scale);
+    if (sprA.width !== px){ sprA.width = sprA.height = sprB.width = sprB.height = px; }
+    const a = sprA.getContext('2d'), b = sprB.getContext('2d');
+    a.setTransform(1, 0, 0, 1, 0, 0); a.clearRect(0, 0, px, px); a.setTransform(scale, 0, 0, scale, 0, 0);
+    if (ball) drawBall(a, SPR / 2, SPR_FOOT, heroColor(ch), spin);
+    else drawCharacter(a, SPR / 2, SPR_FOOT, o, ch);
+    b.setTransform(1, 0, 0, 1, 0, 0); b.globalCompositeOperation = 'source-over'; b.clearRect(0, 0, px, px);
+    const d = 2 * scale;
+    for (let k = 0; k < 8; k++){ const ang = k * TAU / 8; b.drawImage(sprA, Math.cos(ang) * d, Math.sin(ang) * d); }
+    b.globalCompositeOperation = 'source-in'; b.fillStyle = '#160c28'; b.fillRect(0, 0, px, px);
+    b.globalCompositeOperation = 'source-over'; b.drawImage(sprA, 0, 0);
+    return sprB;
+  }
+
   function drawRocket(c, x, y, s, flame){
     c.save(); c.translate(x, y); c.scale(s, s);
     if (flame){
@@ -2260,7 +2289,7 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
            landT: 99, flip: null, flipDur: 1, rocket: 0, shield: false, dj: 0, djReady: true, hot: 0 },
       lastFloor: 0, maxFloor: 0, bonus: 0, combo: { count: 0, floors: 0, timer: 0 },
       popups: [], banner: null, parts: [], streak: 0, unl: unlockedCount(totalFloors), newChars: [],
-      coins: 0, slow: 0, magnet: 0, shake: 0, freeze: 0, flash: 0,
+      coins: 0, slow: 0, magnet: 0, shake: 0, freeze: 0, flash: 0, trail: [],
       target: mb.score, targetFloor: mb.floor, beatBest: false, leader: leaderEntry(), beatLeader: false,
       route: makeRoute(startTown)
     };
@@ -2451,6 +2480,7 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
             sfx.perfect();
           } else {
             S.streak = 0;
+            p.ball = p.speed >= 5;
             sfx.jump();
           }
         } else if (p.dj > 0 && p.djReady && !floorBelow(p)){
@@ -2469,7 +2499,8 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
           for (const pl of S.plats){
             if (solid(pl) && prevY <= pl.y + 0.01 && p.y >= pl.y && p.x + 9 > pl.x && p.x - 9 < pl.x + pl.w){
               p.y = pl.y; p.vy = 0; p.grounded = true; p.plat = pl; p.squash = 1;
-              p.landT = 0; p.flip = null; p.hot = 0; p.djReady = true;
+              p.landT = 0; p.flip = null; p.hot = 0; p.djReady = true; p.ball = false;
+              for (const d of [-1, 1]) for (let k = 0; k < 3; k++) S.parts.push({ x: p.x + d * (6 + k * 5), y: p.y - 3, vx: d * (0.8 + Math.random()), vy: -0.3 - Math.random() * 0.5, life: 0, max: 20, kind: 'puff', size: 3 + Math.random() * 2, spin: 0 });
               land(pl.n);
               if (breaks(pl) && pl.t < 0){ pl.t = 0; sfx.crack(); }
               if (pl.hz === 'bounce'){
@@ -2493,6 +2524,9 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
       }
     }
     p.squash *= 0.82;
+    if (p.grounded && p.speed > 5 && S.t % 5 === 0) S.parts.push({ x: p.x - p.dir * 10, y: p.y - 3, vx: -p.dir * 1.2, vy: -0.4, life: 0, max: 18, kind: 'puff', size: 2.5 + Math.random() * 2, spin: 0 });
+    const fast = p.speed > 6 || p.rocket > 0 || (p.ball && !p.grounded);
+    if (S.t % 2 === 0){ if (fast) S.trail.push({ x: p.x, y: p.y }); if (S.trail.length > 5 || (!fast && S.trail.length)) S.trail.shift(); }
 
     // power ups and coins
     for (const pl of S.plats){
@@ -2506,7 +2540,10 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
           const dx = p.x - cx, dy = (p.y - 28) - cy, dist = Math.hypot(dx, dy);
           if (dist < 240){ const k = Math.max(0.12, Math.min(1, 9 / Math.max(dist, 1))); cx += dx * k; cy += dy * k; c.fx = cx; c.fy = cy; }
         }
-        if (Math.abs(p.x - cx) < 18 && Math.abs((p.y - 28) - cy) < 30){ c.taken = true; S.coins++; sfx.coin(); }
+        if (Math.abs(p.x - cx) < 18 && Math.abs((p.y - 28) - cy) < 30){
+          c.taken = true; S.coins++; sfx.coin();
+          for (let k = 0; k < 6; k++){ const a = k * TAU / 6; S.parts.push({ x: cx, y: cy, vx: Math.cos(a) * 2.2, vy: Math.sin(a) * 2.2, life: 0, max: 16, kind: 'star', size: 2.4, spin: a }); }
+        }
       }
     }
 
@@ -2940,12 +2977,19 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
       const flicker = p.rocket > 120 || Math.floor(p.rocket / 6) % 2;
       if (flicker) drawRocket(ctx, p.x - p.dir * 13, p.y - S.camY - 30, 0.95, p.rocket > 45);
     }
-    const stretch = p.grounded ? 0 : Math.min(0.15, Math.abs(p.vy) * 0.012);
+    const stretch = p.grounded ? 0 : Math.min(0.18, Math.abs(p.vy) * 0.014);
     const sq = p.squash;
-    drawCharacter(ctx, p.x, p.y - S.camY, {
+    const ball = !p.grounded && p.ball && p.flip === null && p.rocket <= 0;
+    const spr = heroSprite({
       dir: p.dir, anim: p.anim, grounded: p.grounded, rot,
-      sx: 1 + sq * 0.18 - stretch, sy: 1 - sq * 0.18 + stretch
-    }, current);
+      sx: 1 + sq * 0.26 - stretch, sy: 1 - sq * 0.26 + stretch
+    }, current, ball, S.t * 0.45 * p.dir);
+    S.trail.forEach((g, i) => {
+      ctx.globalAlpha = 0.2 * (i + 1) / S.trail.length;
+      ctx.drawImage(spr, g.x - SPR / 2, g.y - S.camY - SPR_FOOT, SPR, SPR);
+    });
+    ctx.globalAlpha = 1;
+    ctx.drawImage(spr, p.x - SPR / 2, p.y - S.camY - SPR_FOOT, SPR, SPR);
     if (p.shield){
       const tt = performance.now() / 300;
       ctx.fillStyle = 'rgba(122,215,255,.14)'; ctx.strokeStyle = 'rgba(122,215,255,' + (0.6 + 0.3 * Math.sin(tt)) + ')'; ctx.lineWidth = 2.5;
