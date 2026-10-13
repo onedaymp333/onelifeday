@@ -230,6 +230,7 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
           <li><b>Double jump</b>tap again in the air</li>
           <li><b>Slow clock</b>the tower rises slower</li>
           <li><b>Magnet</b>pulls coins to you</li>
+          <li><b>PATH Turbo</b>gold PATH token: 7 seconds of rainbow speed, higher jumps, and you can't fall out</li>
           <li><b>Coins</b>buy hats in the shop</li>
           <li><b>Every 50 floors</b>a new Hudson County stop with its own tricky floors</li>
           <li><b>Start in</b>tap the arrows to pick a town, then the stops come in a random order</li>
@@ -1125,7 +1126,7 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
   const SPR = 150, SPR_FOOT = 105;
   const sprA = document.createElement('canvas'), sprB = document.createElement('canvas');
   // The hero is drawn once into a sprite, then given a dark cartoon outline.
-  function heroSprite(o, ch){
+  function heroSprite(o, ch, hue){
     const px = Math.ceil(SPR * scale);
     if (sprA.width !== px){ sprA.width = sprA.height = sprB.width = sprB.height = px; }
     const a = sprA.getContext('2d'), b = sprB.getContext('2d');
@@ -1136,6 +1137,7 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
     for (let k = 0; k < 8; k++){ const ang = k * TAU / 8; b.drawImage(sprA, Math.cos(ang) * d, Math.sin(ang) * d); }
     b.globalCompositeOperation = 'source-in'; b.fillStyle = '#160c28'; b.fillRect(0, 0, px, px);
     b.globalCompositeOperation = 'source-over'; b.drawImage(sprA, 0, 0);
+    if (hue !== undefined){ b.globalCompositeOperation = 'source-atop'; b.fillStyle = 'hsla(' + hue + ',100%,60%,.5)'; b.fillRect(0, 0, px, px); b.globalCompositeOperation = 'source-over'; }
     return sprB;
   }
 
@@ -2119,7 +2121,8 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
   let difficulty = DIFF[store.get('odt.diff')] ? store.get('odt.diff') : 'normal';
   // Each world has its own tricky floor.
   const HAZARD = { ice:'crack', forest:'bounce', rainbow:'bounce', desert:'crumble', ocean:'move', volcano:'lava', candy:'slip', space:'move', neon:'blink', golden:'crumble' };
-  const ITEMS = { rocket:'ROCKET!', shield:'SHIELD!', double:'DOUBLE JUMP!', slow:'SLOW CLOCK!', magnet:'MAGNET!' };
+  const ITEMS = { rocket:'ROCKET!', shield:'SHIELD!', double:'DOUBLE JUMP!', slow:'SLOW CLOCK!', magnet:'MAGNET!', turbo:'PATH TURBO!' };
+  const TURBO_TIME = 420;   // 7 seconds
   const solid = pl => !pl.gone && (pl.hz !== 'blink' || pl.on);
   const breaks = pl => pl.hz === 'crack' || pl.hz === 'crumble';
 
@@ -2233,8 +2236,9 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
   function makePlat(n){
     const inner = W - 2 * WALL, D = DIFF[difficulty];
     if (n === 0 || n % 50 === 0) return { n, x: WALL, w: inner, y: -n * GAP, big: true, seed: n * 7919 + 1 };
-    const d = Math.min(1, n / 300), lap = lapOf(n);
-    const minW = Math.max(64, 150 - 75 * d + D.width), maxW = Math.min(inner - 20, Math.max(minW + 10, 220 - 95 * d + D.width));
+    // floors start long (about two thirds of the tower) and ease down over the first 400 floors
+    const d = Math.min(1, n / 400), lap = lapOf(n);
+    const minW = Math.max(64, 190 - 100 * d + D.width), maxW = Math.min(inner - 16, Math.max(minW + 10, 270 - 120 * d + D.width));
     // from floor 300 on, floors get 0.2% narrower every 100 floors, and each lap of the county trims them a bit more
     const shrink = Math.max(0.55, (n >= 300 ? 1 - 0.002 * (Math.floor(n / 100) - 2) : 1) * (1 - 0.05 * lap));
     const w = Math.max(56, (minW + Math.random() * (maxW - minW)) * shrink);
@@ -2255,8 +2259,10 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
     if (n >= 10 && n - S.lastItem >= 9 && Math.random() < 0.16){
       const pool = ['shield', 'shield', 'double', 'double', 'slow', 'magnet', 'magnet'];
       if (n - S.lastRocket >= 25) pool.push('rocket', 'rocket');
+      if (n >= 20 && n - S.lastTurbo >= 40) pool.push('turbo', 'turbo');
       const type = pool[Math.floor(Math.random() * pool.length)];
       if (type === 'rocket') S.lastRocket = n;
+      if (type === 'turbo') S.lastTurbo = n;
       pl.item = { type, dx: 20 + Math.random() * (w - 40), taken: false };
       S.lastItem = n;
     }
@@ -2273,7 +2279,7 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
   function newGame(){
     const mb = myBest();
     S = {
-      plats: [], nextN: 0, camY: -H + 150, t: 0, started: false, scrolling: false, scrollStart: 0, level: 0, lastRocket: 0, lastItem: 0,
+      plats: [], nextN: 0, camY: -H + 150, t: 0, started: false, scrolling: false, scrollStart: 0, level: 0, lastRocket: 0, lastItem: 0, lastTurbo: 0, turbo: 0,
       p: { x: W / 2, y: 0, vy: 0, dir: 1, speed: 2.6, grounded: true, coyote: 0, buffer: 0, squash: 0, anim: 0, plat: null,
            landT: 99, flip: null, flipDur: 1, rocket: 0, shield: false, dj: 0, djReady: true, hot: 0 },
       lastFloor: 0, maxFloor: 0, bonus: 0, combo: { count: 0, floors: 0, timer: 0 },
@@ -2402,6 +2408,7 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
     if (type === 'double'){ p.dj = 900; p.djReady = true; }
     if (type === 'slow') S.slow = 480;
     if (type === 'magnet') S.magnet = 600;
+    if (type === 'turbo'){ S.turbo = TURBO_TIME; p.speed = 8.6; sfx.fanfare(); S.flash = 0.6; S.shake = 8; }
     banner(ITEMS[type]);
     sfx.combo();
   }
@@ -2427,7 +2434,7 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
     }
     const on = p.grounded ? p.plat : null;
     const slip = !!on && on.hz === 'slip';
-    if (p.grounded){ p.landT++; p.speed = Math.min(slip ? 8.6 : 7.2, p.speed + (slip ? 0.16 : 0.045)); p.anim += p.speed * 0.09; }
+    if (p.grounded){ p.landT++; p.speed = S.turbo > 0 ? 8.6 : Math.min(slip ? 8.6 : 7.2, p.speed + (slip ? 0.16 : 0.045)); p.anim += p.speed * 0.09; }
     if (on && on.hz === 'move') p.x += on.vx;
     p.x += p.dir * p.speed;
     if (p.x - HALF < WALL){ p.x = WALL + HALF; p.dir = 1; }
@@ -2435,6 +2442,13 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
     if (p.dj > 0) p.dj--;
     if (S.slow > 0) S.slow--;
     if (S.magnet > 0) S.magnet--;
+    if (S.turbo > 0){
+      S.turbo--;
+      // rainbow sparkles and a quick arpeggio while PATH Turbo lasts
+      if (S.t % 2 === 0) S.parts.push({ x: p.x + (Math.random() - 0.5) * 24, y: p.y - 10 - Math.random() * 50, vx: (Math.random() - 0.5) * 1.6, vy: (Math.random() - 0.5) * 1.6, life: 0, max: 24, kind: 'confetti', size: 3 + Math.random() * 2, spin: Math.random() * 6, col: 'hsl(' + ((S.t * 12) % 360) + ',100%,60%)' });
+      if (S.t % 8 === 0) tone(523 * Math.pow(2, ((S.t / 8) % 4) / 4), 600, 0.06, 'square', 0.02);
+      if (S.turbo === 0) popup('TURBO OVER', C.ice);
+    }
     if (S.shake > 0) S.shake--;
     if (S.flash > 0) S.flash = Math.max(0, S.flash - 0.08);
 
@@ -2455,7 +2469,7 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
           // a perfect jump launches higher, and chaining them launches higher still
           const perfect = p.grounded && p.landT <= 6;
           const boost = perfect ? Math.min(1.34, 1.2 + S.streak * 0.035) : 1;
-          p.vy = -(10.6 + p.speed * 0.95) * boost;
+          p.vy = -(10.6 + p.speed * 0.95) * boost * (S.turbo > 0 ? 1.2 : 1);
           p.grounded = false; p.coyote = 0; p.buffer = 0; p.hot = 0;
           p.squash = -0.6;
           if (perfect){
@@ -2513,13 +2527,13 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
     }
     p.squash *= 0.82;
     if (p.grounded && p.speed > 5 && S.t % 5 === 0) S.parts.push({ x: p.x - p.dir * 10, y: p.y - 3, vx: -p.dir * 1.2, vy: -0.4, life: 0, max: 18, kind: 'puff', size: 2.5 + Math.random() * 2, spin: 0 });
-    const fast = p.speed > 6 || p.rocket > 0;
+    const fast = p.speed > 6 || p.rocket > 0 || S.turbo > 0;
     if (S.t % 2 === 0){ if (fast) S.trail.push({ x: p.x, y: p.y }); if (S.trail.length > 5 || (!fast && S.trail.length)) S.trail.shift(); }
 
     // power ups and coins
     for (const pl of S.plats){
       const it = pl.item;
-      if (it && !it.taken && Math.abs(p.x - (pl.x + it.dx)) < 24 && Math.abs((p.y - 30) - (pl.y - 26)) < 36){ it.taken = true; grab(it.type); }
+      if (it && !it.taken && Math.abs(p.x - (pl.x + it.dx)) < 30 && Math.abs((p.y - 30) - (pl.y - 38)) < 40){ it.taken = true; grab(it.type); }
       if (!pl.coins) continue;
       for (const c of pl.coins){
         if (c.taken) continue;
@@ -2528,7 +2542,7 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
           const dx = p.x - cx, dy = (p.y - 28) - cy, dist = Math.hypot(dx, dy);
           if (dist < 240){ const k = Math.max(0.12, Math.min(1, 9 / Math.max(dist, 1))); cx += dx * k; cy += dy * k; c.fx = cx; c.fy = cy; }
         }
-        if (Math.abs(p.x - cx) < 18 && Math.abs((p.y - 28) - cy) < 30){
+        if (Math.abs(p.x - cx) < 22 && Math.abs((p.y - 28) - cy) < 32){
           c.taken = true; S.coins++; sfx.coin();
           for (let k = 0; k < 6; k++){ const a = k * TAU / 6; S.parts.push({ x: cx, y: cy, vx: Math.cos(a) * 2.2, vy: Math.sin(a) * 2.2, life: 0, max: 16, kind: 'star', size: 2.4, spin: a }); }
         }
@@ -2577,7 +2591,10 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
     if (!S.beatLeader && S.leader && !isMe(S.leader) && sc > S.leader.score){ S.beatLeader = true; banner("YOU'RE #1!"); sfx.fanfare(); confetti(); S.shake = 14; S.flash = 0.7; }
 
     if (p.y - PH > S.camY + H){
-      if (p.shield){
+      if (S.turbo > 0){
+        p.rocket = 0; p.y = S.camY + H - 4; p.vy = -24; p.grounded = false; p.flip = null;
+        sfx.boing(); S.shake = 6;
+      } else if (p.shield){
         // the shield throws you back up once
         p.shield = false; p.rocket = 0; p.y = S.camY + H - 4; p.vy = -24; p.grounded = false; p.flip = null;
         banner('SAVED!'); sfx.shield(); S.shake = 10; S.flash = 0.5;
@@ -2869,6 +2886,15 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
       c.strokeStyle = '#1c1c24'; c.lineWidth = 2; c.lineCap = 'round';
       c.beginPath(); c.moveTo(x, y); c.lineTo(x, y - 6); c.moveTo(x, y); c.lineTo(x + 4, y + 2); c.stroke(); return;
     }
+    if (type === 'turbo'){
+      const sw = Math.max(0.2, Math.abs(Math.cos(performance.now() / 260)));
+      c.save(); c.translate(x, y); c.scale(sw, 1);
+      c.fillStyle = '#b87400'; c.beginPath(); c.arc(0, 0, 13, 0, TAU); c.fill();
+      c.fillStyle = '#ffc531'; c.beginPath(); c.arc(0, 0, 11, 0, TAU); c.fill();
+      c.strokeStyle = '#fff3b0'; c.lineWidth = 1.2; c.beginPath(); c.arc(0, 0, 8.5, 0, TAU); c.stroke();
+      c.fillStyle = '#1e3a8a'; c.font = '7px ' + FONT; c.textAlign = 'center'; c.fillText('PATH', 0, 2.5);
+      c.restore(); return;
+    }
     if (type === 'magnet'){
       c.lineCap = 'butt'; c.lineWidth = 7;
       c.strokeStyle = '#e8173a'; c.beginPath(); c.arc(x, y - 1, 8, 0, Math.PI); c.stroke();
@@ -2882,14 +2908,15 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
     for (const pl of S.plats){
       const it = pl.item;
       if (it && !it.taken && !pl.gone){
-        const x = pl.x + it.dx, y = pl.y - S.camY - 30 + Math.sin(time * 3 + pl.n) * 4;
-        if (y > -40 && y < H + 40){
-          const gl = ctx.createRadialGradient(x, y, 2, x, y, 26);
-          gl.addColorStop(0, 'rgba(255,220,120,.75)'); gl.addColorStop(1, 'rgba(255,220,120,0)');
-          ctx.fillStyle = gl; ctx.beginPath(); ctx.arc(x, y, 26, 0, TAU); ctx.fill();
-          ctx.strokeStyle = 'rgba(255,255,255,' + (0.4 + 0.4 * Math.sin(time * 6)) + ')'; ctx.lineWidth = 2;
-          ctx.beginPath(); ctx.arc(x, y, 18 + Math.sin(time * 6) * 2, 0, TAU); ctx.stroke();
-          ctx.save(); ctx.translate(x, y); ctx.rotate(Math.sin(time * 2 + pl.n) * 0.2);
+        const x = pl.x + it.dx, y = pl.y - S.camY - 38 + Math.sin(time * 3 + pl.n) * 4;
+        if (y > -50 && y < H + 50){
+          const special = it.type === 'turbo';
+          const gl = ctx.createRadialGradient(x, y, 2, x, y, 38);
+          gl.addColorStop(0, special ? 'hsla(' + ((time * 200) % 360) + ',100%,65%,.85)' : 'rgba(255,220,120,.75)'); gl.addColorStop(1, 'rgba(255,220,120,0)');
+          ctx.fillStyle = gl; ctx.beginPath(); ctx.arc(x, y, 38, 0, TAU); ctx.fill();
+          ctx.strokeStyle = 'rgba(255,255,255,' + (0.45 + 0.4 * Math.sin(time * 6)) + ')'; ctx.lineWidth = 2.5;
+          ctx.beginPath(); ctx.arc(x, y, 26 + Math.sin(time * 6) * 2, 0, TAU); ctx.stroke();
+          ctx.save(); ctx.translate(x, y); ctx.rotate(Math.sin(time * 2 + pl.n) * 0.2); ctx.scale(1.5, 1.5);
           drawItemIcon(ctx, it.type, 0, 0);
           ctx.restore();
         }
@@ -2900,9 +2927,9 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
         const x = c.fx !== null ? c.fx : pl.x + c.dx, y = (c.fy !== null ? c.fy : pl.y + c.dy) - S.camY;
         if (y < -20 || y > H + 20) continue;
         const sw = Math.max(0.15, Math.abs(Math.cos(time * 4 + c.dx * 0.1 + pl.n)));
-        ctx.fillStyle = '#d18a00'; ctx.beginPath(); ctx.ellipse(x, y, 7.5 * sw, 7.5, 0, 0, TAU); ctx.fill();
-        ctx.fillStyle = '#ffc531'; ctx.beginPath(); ctx.ellipse(x, y, 6.2 * sw, 6.2, 0, 0, TAU); ctx.fill();
-        ctx.fillStyle = '#fff3b0'; ctx.fillRect(x - 1.2 * sw, y - 3.5, 2.4 * sw, 7);
+        ctx.fillStyle = '#d18a00'; ctx.beginPath(); ctx.ellipse(x, y, 10 * sw, 10, 0, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#ffc531'; ctx.beginPath(); ctx.ellipse(x, y, 8.3 * sw, 8.3, 0, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#fff3b0'; ctx.fillRect(x - 1.6 * sw, y - 4.6, 3.2 * sw, 9.2);
       }
     }
   }
@@ -2970,7 +2997,7 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
     const spr = heroSprite({
       dir: p.dir, anim: p.anim, grounded: p.grounded, rot,
       sx: 1 + sq * 0.26 - stretch, sy: 1 - sq * 0.26 + stretch
-    }, current);
+    }, current, S.turbo > 0 ? (S.t * 12) % 360 : undefined);
     S.trail.forEach((g, i) => {
       ctx.globalAlpha = 0.2 * (i + 1) / S.trail.length;
       ctx.drawImage(spr, g.x - SPR / 2, g.y - S.camY - SPR_FOOT, SPR, SPR);
@@ -3011,6 +3038,7 @@ button,.btn,.tile,.ch{touch-action:manipulation;-webkit-tap-highlight-color:tran
     if (p.dj > 0){ timerBar('DOUBLE JUMP', ty, p.dj, 900, '#8cff7a'); ty += 16; }
     if (S.slow > 0){ timerBar('SLOW CLOCK', ty, S.slow, 480, '#b39dff'); ty += 16; }
     if (S.magnet > 0){ timerBar('MAGNET', ty, S.magnet, 600, '#ff7a8a'); ty += 16; }
+    if (S.turbo > 0){ timerBar('PATH TURBO', ty, S.turbo, TURBO_TIME, 'hsl(' + ((S.t * 12) % 360) + ',100%,62%)'); ty += 16; }
     if (p.shield){ hudText('SHIELD ON', WALL + 10, ty, 11, 'left', '#7ad7ff'); }
 
     if (S.combo.count){
