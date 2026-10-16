@@ -6,6 +6,9 @@ node_modules/
 out/
 next-env.d.ts
 
+# TypeScript incremental build cache
+*.tsbuildinfo
+
 # Environment files. NEVER commit real keys.
 .env
 .env.local
