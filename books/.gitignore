@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Next.js build output
+.next/
+out/
+next-env.d.ts
+
+# Environment files. NEVER commit real keys.
+.env
+.env.local
+.env.*.local
+
+# Local backups made by the Mac Mini helper
+backups/
+
+# OS and editor
+.DS_Store
+*.log
