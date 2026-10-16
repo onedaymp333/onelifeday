@@ -1,29 +1,30 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSupabaseEnv } from "@/lib/config";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import {
+  loadEntitiesWithAccounts,
+  loadRecentEntries,
+  loadSummaryRows,
+} from "@/lib/data";
+import { computeDashboard } from "@/lib/ledger";
+import { summarizeEntry } from "@/lib/entry-view";
+import { currentMonthRange } from "@/lib/dates";
+import { formatUSD } from "@/lib/money";
 import NotConfigured from "@/components/NotConfigured";
 import SignOutButton from "@/components/SignOutButton";
 import SetupBooks from "./SetupBooks";
+import EntityTabs from "@/components/EntityTabs";
+import TransactionRow from "@/components/TransactionRow";
+import BottomNav from "@/components/BottomNav";
 
 export const dynamic = "force-dynamic";
 
-const TAX_LABELS: Record<string, string> = {
-  schedule_c: "Schedule C",
-  s_corp: "S corp",
-  personal: "Personal",
-  partnership: "Partnership",
-};
-
-interface EntityRow {
-  id: string;
-  name: string;
-  tax_treatment: string;
-  is_personal: boolean;
-  brands: { name: string }[];
-  accounts: { id: string }[];
-}
-
-export default async function Dashboard() {
+export default async function Dashboard({
+  searchParams,
+}: {
+  searchParams: { entity?: string };
+}) {
   if (!getSupabaseEnv().configured) {
     return <NotConfigured />;
   }
@@ -36,81 +37,134 @@ export default async function Dashboard() {
     redirect("/login");
   }
 
-  const { data } = await supabase
-    .from("entities")
-    .select("id, name, tax_treatment, is_personal, brands(name), accounts(id)")
-    .order("is_personal", { ascending: true })
-    .order("name", { ascending: true });
+  const entities = await loadEntitiesWithAccounts(supabase);
 
-  const entities = (data ?? []) as EntityRow[];
-  const hasBooks = entities.length > 0;
-
-  return (
-    <main className="mx-auto max-w-3xl px-4 py-8">
-      <header className="flex items-center justify-between">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-brand-soft">
-            OneDay Books
-          </p>
-          <h1 className="mt-1 text-xl font-semibold">Dashboard</h1>
-        </div>
-        <SignOutButton />
-      </header>
-
-      {/* Needs your review. A real count arrives with the ledger milestone. */}
-      <section className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Tile label="Needs your review" value="0" accent />
-        <Tile label="Cash on hand" value="$0" />
-        <Tile label="Income this month" value="$0" />
-        <Tile label="Expenses this month" value="$0" />
-      </section>
-
-      {!hasBooks ? (
+  if (entities.length === 0) {
+    return (
+      <main className="mx-auto max-w-3xl px-4 py-8">
+        <Header />
         <section className="mt-8">
           <SetupBooks />
         </section>
-      ) : (
-        <section className="mt-8 space-y-4">
-          <h2 className="text-sm font-medium uppercase tracking-wide text-white/50">
-            Your books
-          </h2>
-          {entities.map((e) => (
-            <div key={e.id} className="rounded-2xl bg-ink-soft p-5">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-lg font-semibold">{e.name}</p>
-                  <p className="mt-0.5 text-sm text-white/50">
-                    {TAX_LABELS[e.tax_treatment] ?? e.tax_treatment} ·{" "}
-                    {e.accounts.length} categories
-                  </p>
-                </div>
-              </div>
-              {e.brands.length > 0 && (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {e.brands.map((b) => (
-                    <span
-                      key={b.name}
-                      className="rounded-full bg-white/10 px-3 py-1 text-xs text-white/80"
-                    >
-                      {b.name}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
+        <Disclaimer />
+      </main>
+    );
+  }
 
-          <div className="rounded-2xl border border-dashed border-white/15 p-5 text-sm text-white/50">
-            Combined view across all books lands with the dashboard milestone.
-          </div>
-        </section>
+  const selectedId =
+    searchParams.entity && entities.some((e) => e.id === searchParams.entity)
+      ? searchParams.entity
+      : null;
+
+  const month = currentMonthRange();
+  const [summaryRows, rawEntries] = await Promise.all([
+    loadSummaryRows(supabase, selectedId),
+    loadRecentEntries(supabase, selectedId, 8),
+  ]);
+
+  const summary = computeDashboard(summaryRows, {
+    from: month.from,
+    to: month.to,
+  });
+  const recent = rawEntries.map(summarizeEntry);
+
+  return (
+    <main className="mx-auto max-w-3xl px-4 py-8 pb-28">
+      <Header />
+
+      {entities.length > 1 && (
+        <div className="mt-5">
+          <EntityTabs
+            entities={entities}
+            currentId={selectedId}
+            basePath="/dashboard"
+          />
+        </div>
       )}
 
-      <footer className="mt-10 border-t border-white/10 pt-4 text-xs text-white/40">
-        OneDay Books gives software assistance, not licensed CPA advice.
-        Anything uncertain gets flagged for you or your tax pro.
-      </footer>
+      <p className="mt-5 text-xs uppercase tracking-wide text-white/40">
+        {month.label}
+      </p>
+      <section className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Tile label="Cash on hand" value={formatUSD(summary.cashCents)} accent />
+        <Tile label="Income" value={formatUSD(summary.incomeCents)} tone="in" />
+        <Tile
+          label="Expenses"
+          value={formatUSD(summary.expenseCents)}
+          tone="out"
+        />
+        <Tile
+          label="Net profit"
+          value={formatUSD(summary.netCents)}
+          tone={summary.netCents >= 0 ? "in" : "out"}
+        />
+      </section>
+
+      <div className="mt-3 flex items-center gap-2 rounded-xl bg-white/5 px-4 py-2 text-sm text-white/60">
+        <span className="font-semibold text-white/80">Needs your review: 0</span>
+        <span className="text-white/40">
+          The review queues arrive with the AI milestone.
+        </span>
+      </div>
+
+      <section className="mt-8">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-medium uppercase tracking-wide text-white/50">
+            Recent
+          </h2>
+          <Link href="/transactions" className="text-sm text-brand-soft">
+            See all
+          </Link>
+        </div>
+
+        {recent.length === 0 ? (
+          <div className="mt-3 rounded-2xl bg-ink-soft p-8 text-center">
+            <p className="font-medium">No transactions yet</p>
+            <p className="mt-1 text-sm text-white/50">
+              Tap the plus to add your first one.
+            </p>
+            <Link
+              href="/transactions/new"
+              className="mt-4 inline-block rounded-lg bg-brand px-4 py-2 text-sm font-medium"
+            >
+              Add transaction
+            </Link>
+          </div>
+        ) : (
+          <div className="mt-3 divide-y divide-white/5 rounded-2xl bg-ink-soft px-4">
+            {recent.map((e) => (
+              <TransactionRow key={e.id} entry={e} showEntity={!selectedId} />
+            ))}
+          </div>
+        )}
+      </section>
+
+      <Disclaimer />
+      <BottomNav />
     </main>
+  );
+}
+
+function Header() {
+  return (
+    <header className="flex items-center justify-between">
+      <div>
+        <p className="text-xs font-medium uppercase tracking-wide text-brand-soft">
+          OneDay Books
+        </p>
+        <h1 className="mt-1 text-xl font-semibold">Dashboard</h1>
+      </div>
+      <SignOutButton />
+    </header>
+  );
+}
+
+function Disclaimer() {
+  return (
+    <footer className="mt-10 border-t border-white/10 pt-4 text-xs text-white/40">
+      OneDay Books gives software assistance, not licensed CPA advice. Anything
+      uncertain gets flagged for you or your tax pro.
+    </footer>
   );
 }
 
@@ -118,18 +172,26 @@ function Tile({
   label,
   value,
   accent,
+  tone,
 }: {
   label: string;
   value: string;
   accent?: boolean;
+  tone?: "in" | "out";
 }) {
+  const valueColor =
+    tone === "in"
+      ? "text-money-in"
+      : tone === "out"
+        ? "text-money-out"
+        : "text-white";
   return (
     <div
       className={`rounded-xl p-4 ${
         accent ? "bg-brand/20 ring-1 ring-brand/40" : "bg-ink-soft"
       }`}
     >
-      <p className="text-2xl font-semibold">{value}</p>
+      <p className={`text-2xl font-semibold ${valueColor}`}>{value}</p>
       <p className="mt-1 text-xs text-white/50">{label}</p>
     </div>
   );
